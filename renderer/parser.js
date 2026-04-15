@@ -1,4 +1,32 @@
-const LIST_KEYS = new Set(['bind', 'binde', 'bindm', 'bindl', 'bindr', 'exec-once', 'exec', 'env', 'monitor', 'workspace', 'windowrule', 'windowrulev2', 'layerrule', 'source', 'animation', 'bezier', 'permission']);
+const LIST_KEYS = new Set([
+  "bind",
+  "binde",
+  "bindm",
+  "bindl",
+  "bindr",
+  "bindc",
+  "bindg",
+  "bindd",
+  "bindk",
+  "unbind",
+  "submap",
+  "exec-once",
+  "exec",
+  "env",
+  "monitor",
+  "workspace",
+  "windowrule",
+  "windowrulev2",
+  "layerrule",
+  "source",
+  "animation",
+  "bezier",
+  "permission",
+  "gesture",
+  "device",
+  "touchdevice",
+  "tablet",
+]);
 
 export function parseConfig(text) {
   const rawLines = text.split('\n');

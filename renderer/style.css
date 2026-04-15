@@ -1515,3 +1515,145 @@ button {
     left: calc(100% - 30px);
   }
 }
+
+.terminal-about {
+  padding-bottom: 28px;
+}
+
+.terminal-card {
+  background: #0a0a0a;
+  border: 1px solid #232832;
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.terminal-topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #1a1f28;
+  background: #0f0f0f;
+  font-family: var(--font-mono);
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.terminal-dot.red {
+  background: #f87171;
+}
+
+.terminal-dot.yellow {
+  background: #fbbf24;
+}
+
+.terminal-dot.green {
+  background: #34d399;
+}
+
+.terminal-title {
+  margin-left: 6px;
+  font-size: 11px;
+  color: #7f8a99;
+  letter-spacing: 0.04em;
+}
+
+.terminal-body {
+  padding: 18px 20px 20px;
+  font-family: var(--font-mono);
+  background: #050505;
+}
+
+.terminal-line {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #d5d9e0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.terminal-line.muted {
+  color: #9aa4b2;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.prompt {
+  color: #cdd6f4;
+}
+
+.at {
+  color: #7c8798;
+}
+
+.path {
+  color: #89b4fa;
+}
+
+.terminal-accent {
+  color: #a6e3a1;
+}
+
+.terminal-value {
+  color: #f5f5f5;
+  font-weight: 600;
+}
+
+.terminal-muted {
+  color: #97a0ad;
+}
+
+.ascii-banner {
+  margin: 14px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #1b2230;
+  border-radius: 12px;
+  background: #0a0d12;
+  color: #dce3ea;
+  font-family: var(--font-mono);
+  font-size: clamp(7px, 0.92vw, 12px);
+  line-height: 1.25;
+  letter-spacing: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.cursor {
+  color: #a6e3a1;
+  animation: blink-cursor 1s steps(1) infinite;
+}
+
+@keyframes blink-cursor {
+
+  0%,
+  50% {
+    opacity: 1;
+  }
+
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 820px) {
+  .terminal-body {
+    padding: 14px 14px 16px;
+  }
+
+  .terminal-line {
+    font-size: 12px;
+    line-height: 1.75;
+  }
+
+  .ascii-banner {
+    font-size: 7px;
+    padding: 12px;
+  }
+}

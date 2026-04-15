@@ -532,9 +532,56 @@ function activateSection(section, subsection) {
   renderActiveSection();
 }
 
+function renderAboutSection() {
+  return `
+    <div class="about-page terminal-about">
+      <section class="terminal-card">
+        <div class="terminal-topbar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">kusoidev@hypreditor:~</span>
+        </div>
+
+        <div class="terminal-body">
+          <div class="terminal-line">
+            <span class="prompt">kusoidev@hypreditor</span><span class="at">:</span><span class="path">~</span>$ ./about
+          </div>
+
+          <pre class="ascii-banner">
+██╗  ██╗██╗   ██╗██████╗ ██████╗ ███████╗██████╗ ██╗████████╗ ██████╗ ██████╗
+██║  ██║╚██╗ ██╔╝██╔══██╗██╔══██╗██╔════╝██╔══██╗██║╚══██╔══╝██╔═══██╗██╔══██╗
+███████║ ╚████╔╝ ██████╔╝██████╔╝█████╗  ██║  ██║██║   ██║   ██║   ██║██████╔╝
+██╔══██║  ╚██╔╝  ██╔═══╝ ██╔══██╗██╔══╝  ██║  ██║██║   ██║   ██║   ██║██╔══██╗
+██║  ██║   ██║   ██║     ██║  ██║███████╗██████╔╝██║   ██║   ╚██████╔╝██║  ██║
+╚═╝  ╚═╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
+          </pre>
+
+          <div class="terminal-line muted">personal Hyprland config editor</div>
+          <div class="terminal-line">Built with care by <span class="terminal-accent">kusoidev</span></div>
+          <div class="terminal-line">GitHub  : <span class="terminal-value">kusoidev</span></div>
+          <div class="terminal-line">Discord : <span class="terminal-value">kyushoo</span></div>
+          <div class="terminal-line">Project : <span class="terminal-value">HyprEditor</span></div>
+          <div class="terminal-line">
+            About   : <span class="terminal-muted">desktop editor for Hyprland configs, rules, previews, and safer saves with backups</span>
+          </div>
+
+          <div class="terminal-line">
+            <span class="prompt">kusoidev@hypreditor</span><span class="at">:</span><span class="path">~</span>$ <span class="cursor">_</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderActiveSection() {
   const main = $('main-content');
   const sec = state.activeSection;
+  if (sec?.id === "about") {
+    main.innerHTML = renderAboutSection();
+    return;
+  }
   if (!sec) { main.innerHTML = '<div class="empty-state">Select a section</div>'; return; }
 
   let html = `<div class="section-header">
