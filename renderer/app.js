@@ -1,0 +1,705 @@
+import { parseConfig, getValue, getList, applyChange, serializeConfig, getAllSources, findAllMatches } from './parser.js';
+import { SECTIONS } from './schema.js';
+
+let state = {
+  configPath: null,
+  rawLines: [],
+  root: null,
+  includedFiles: [],
+  fileSegments: [],   // [{filePath, startLine, lineCount}] — one per file in load order
+  activeSection: null,
+  activeSubsection: null,
+  dirty: false,
+  searchQuery: '',
+  searchResults: [],
+  searchOpen: false,
+  notification: null,
+};
+
+const $ = id => document.getElementById(id);
+const $$ = sel => document.querySelectorAll(sel);
+
+async function init() {
+  buildSidebar();
+  setupTitleBar();
+  setupSearch();
+
+  const found = await window.hypr.findConfig();
+  if (found) {
+    await loadConfig(found);
+  } else {
+    showWelcome();
+  }
+
+  if (SECTIONS.length) {
+    activateSection(SECTIONS[0], SECTIONS[0].subsections[0]);
+  }
+}
+
+async function loadConfig(filePath) {
+  const res = await window.hypr.readFile(filePath);
+  if (!res.ok) {
+    showNotification(`Failed to read config: ${res.error}`, 'error');
+    return;
+  }
+
+  const { root: tempRoot } = parseConfig(res.content);
+  const sources = getAllSources(tempRoot);
+
+  let includedFiles = [];
+  if (sources.length) {
+    includedFiles = await window.hypr.getIncludedFiles(filePath, sources);
+  }
+  state.includedFiles = includedFiles;
+  const mainLines = res.content.split('\n');
+  const segments = [{ filePath, startLine: 0, lineCount: mainLines.length }];
+  let allLines = [...mainLines];
+
+  for (const inc of includedFiles) {
+    const incLines = inc.content.split('\n');
+    segments.push({ filePath: inc.path, startLine: allLines.length, lineCount: incLines.length });
+    allLines = allLines.concat(incLines);
+  }
+
+  const { root, rawLines } = parseConfig(allLines.join('\n'));
+
+  state.configPath = filePath;
+  state.rawLines = rawLines;
+  state.root = root;
+  state.fileSegments = segments;
+  state.dirty = false;
+
+  updatePathDisplay();
+  updateSaveButton();
+  renderActiveSection();
+
+  const extra = includedFiles.length ? ` (+${includedFiles.length} included files)` : '';
+  showNotification(`Loaded: ${filePath.split('/').pop()}${extra}`, 'success');
+}
+
+async function saveConfig() {
+  if (!state.configPath || !state.dirty) return;
+
+  const segments = state.fileSegments;
+
+  const lastSeg = segments[segments.length - 1];
+  const segEnd = lastSeg ? lastSeg.startLine + lastSeg.lineCount : 0;
+  const overflow = state.rawLines.slice(segEnd);
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    let fileLines = state.rawLines.slice(seg.startLine, seg.startLine + seg.lineCount);
+    if (i === 0 && overflow.length > 0) fileLines = fileLines.concat(overflow);
+    const res = await window.hypr.writeFile(seg.filePath, fileLines.join('\n'));
+    if (!res.ok) {
+      showNotification(`Save failed (${seg.filePath.split('/').pop()}): ${res.error}`, 'error');
+      return;
+    }
+  }
+
+  state.dirty = false;
+  updateSaveButton();
+  const n = segments.length;
+  showNotification(`Saved ${n} file${n > 1 ? 's' : ''}! (backups created as .hypreditor.bak)`, 'success');
+}
+
+function buildSidebar() {
+  const sidebar = $('sidebar-nav');
+  const groups = {};
+
+  for (const section of SECTIONS) {
+    if (!groups[section.group]) groups[section.group] = [];
+    groups[section.group].push(section);
+  }
+
+  let html = '';
+  for (const [group, sections] of Object.entries(groups)) {
+    html += `<div class="nav-group-label">${group}</div>`;
+    for (const sec of sections) {
+      html += `
+        <button class="nav-item" data-section="${sec.id}" title="${sec.label}">
+          <span class="nav-icon">${sec.icon}</span>
+          <span class="nav-label">${sec.label}</span>
+        </button>`;
+    }
+  }
+  sidebar.innerHTML = html;
+
+  sidebar.addEventListener('click', e => {
+    const btn = e.target.closest('.nav-item');
+    if (!btn) return;
+    const sec = SECTIONS.find(s => s.id === btn.dataset.section);
+    if (sec) {
+      activateSection(sec, sec.subsections[0]);
+    }
+  });
+}
+
+function activateSection(section, subsection) {
+  state.activeSection = section;
+  state.activeSubsection = subsection || section.subsections[0];
+  state.searchOpen = false;
+  $('search-input').value = '';
+  state.searchQuery = '';
+
+  $$('.nav-item').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`[data-section="${section.id}"]`);
+  if (btn) btn.classList.add('active');
+
+  renderActiveSection();
+}
+
+function renderActiveSection() {
+  const main = $('main-content');
+  const sec = state.activeSection;
+  if (!sec) { main.innerHTML = '<div class="empty-state">Select a section</div>'; return; }
+
+  let html = `<div class="section-header">
+    <h2 class="section-title">${sec.label}</h2>
+    ${state.configPath ? `<span class="config-file-badge">${state.configPath.split('/').slice(-2).join('/')}</span>` : ''}
+  </div>`;
+
+  if (sec.subsections.length > 1) {
+    html += `<div class="subsection-tabs">`;
+    for (const sub of sec.subsections) {
+      const active = state.activeSubsection?.id === sub.id ? 'active' : '';
+      html += `<button class="sub-tab ${active}" data-sub="${sub.id}">${sub.label}</button>`;
+    }
+    html += `</div>`;
+  }
+
+  const sub = state.activeSubsection || sec.subsections[0];
+  html += renderSubsection(sub);
+
+  main.innerHTML = html;
+
+  main.querySelectorAll('.sub-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const sub = sec.subsections.find(s => s.id === tab.dataset.sub);
+      if (sub) {
+        state.activeSubsection = sub;
+        renderActiveSection();
+      }
+    });
+  });
+
+  attachControlListeners(main, sub);
+}
+
+function renderSubsection(sub) {
+  let html = `<div class="settings-container">`;
+
+  if (!state.root) {
+    html += `<div class="no-config-warning">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <p>No config file loaded.<br>Click the folder icon above to open one, or let HyprEditor auto-detect it.</p>
+      <button class="btn-primary" id="open-config-btn">Open Config File</button>
+    </div>`;
+    html += `</div>`;
+    return html;
+  }
+
+  if (sub.settings && sub.settings.length) {
+    html += `<div class="settings-group">`;
+    for (const setting of sub.settings) {
+      const node = getValueFromPath(sub.sectionPath, setting.key);
+      const currentValue = node ? node.value : '';
+      html += renderControl(setting, currentValue, sub.sectionPath, node?.line);
+    }
+    html += `</div>`;
+  }
+
+  if (sub.lists && sub.lists.length) {
+    for (const listDef of sub.lists) {
+      const entries = getListFromPath(sub.sectionPath, listDef.key);
+      html += renderListSection(listDef, entries, sub.sectionPath);
+    }
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function getValueFromPath(sectionPath, key) {
+  if (!state.root) return null;
+  let node = state.root;
+  for (const seg of sectionPath) {
+    node = node._children[seg];
+    if (!node) return null;
+  }
+  return node._children[key] || null;
+}
+
+function getListFromPath(sectionPath, key) {
+  if (!state.root) return [];
+  let node = state.root;
+  for (const seg of sectionPath) {
+    node = node._children[seg];
+    if (!node) return [];
+  }
+  return node._lists[key] || [];
+}
+
+function renderControl(setting, value, sectionPath, lineIdx) {
+  const id = `ctrl-${sectionPath.join('--')}-${setting.key.replace(/\./g, '-')}`;
+  const pathStr = JSON.stringify(sectionPath);
+  const hasValue = value !== '' && value !== undefined && value !== null;
+  const notSet = lineIdx === undefined || lineIdx === null;
+  const notFoundClass = notSet ? 'not-found' : '';
+
+  const defaultVal = setting.default ?? (
+    setting.type === 'bool' ? 'false' :
+      setting.type === 'range' ? String(setting.min ?? 0) :
+        setting.type === 'select' ? (setting.options?.[0] ?? '') :
+          setting.type === 'color' ? 'rgba(cdd6f4aa)' : ''
+  );
+
+  let controlHtml;
+
+  if (notSet) {
+    controlHtml = `
+      <div class="autoset-row">
+        <span class="not-set-value">—</span>
+        <button class="btn-autoset"
+          data-key="${setting.key}"
+          data-path='${pathStr}'
+          data-default="${escapeHtml(String(defaultVal))}"
+          data-type="${setting.type}"
+          title="Write this key into your config with its default value so you can edit it">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Auto-set
+        </button>
+      </div>`;
+  } else {
+    switch (setting.type) {
+      case 'range': {
+        const numVal = parseFloat(value) || setting.min || 0;
+        controlHtml = `<div class="slider-row">
+          <input type="range" id="${id}" class="slider"
+            min="${setting.min}" max="${setting.max}" step="${setting.step}" value="${numVal}"
+            data-key="${setting.key}" data-path='${pathStr}' data-line="${lineIdx ?? -1}" data-type="range">
+          <span class="slider-value" id="${id}-val">${numVal}${setting.unit}</span>
+        </div>`;
+        break;
+      }
+      case 'bool': {
+        const isTrue = value === 1 || value === 'true' || value === 'yes';
+        controlHtml = `<label class="toggle-label">
+          <input type="checkbox" id="${id}" class="toggle-input" ${isTrue ? 'checked' : ''}
+            data-key="${setting.key}" data-path='${pathStr}' data-line="${lineIdx ?? -1}" data-type="bool">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>`;
+        break;
+      }
+      case 'select':
+        controlHtml = `<select id="${id}" class="select-ctrl"
+          data-key="${setting.key}" data-path='${pathStr}' data-line="${lineIdx ?? -1}" data-type="select">
+          ${setting.options.map(o => `<option ${o === value ? 'selected' : ''}>${o}</option>`).join('')}
+        </select>`;
+        break;
+      case 'color': {
+        const hexColor = hyprColorToHex(value);
+        controlHtml = `<div class="color-row">
+          <input type="color" id="${id}" class="color-input" value="#${hexColor}"
+            data-key="${setting.key}" data-path='${pathStr}' data-line="${lineIdx ?? -1}"
+            data-type="color" data-original="${value}">
+          <span class="color-value">${value || 'not set'}</span>
+        </div>`;
+        break;
+      }
+      case 'text':
+      default:
+        controlHtml = `<input type="text" id="${id}" class="text-input"
+          value="${escapeHtml(value)}" placeholder="${!hasValue ? 'not set' : ''}"
+          data-key="${setting.key}" data-path='${pathStr}' data-line="${lineIdx ?? -1}" data-type="text">`;
+        break;
+    }
+  }
+
+  return `<div class="setting-row ${notFoundClass}" data-key="${setting.key}">
+    <div class="setting-info">
+      <label class="setting-label" for="${id}">${setting.label}</label>
+      <span class="setting-desc">${setting.desc}</span>
+    </div>
+    <div class="setting-control">${controlHtml}</div>
+  </div>`;
+}
+
+function renderListSection(listDef, entries, sectionPath) {
+  const pathStr = JSON.stringify(sectionPath);
+  let html = `
+    <div class="list-section">
+      <div class="list-header">
+        <h3 class="list-title">${listDef.label}</h3>
+        <span class="list-count">${entries.length} entries</span>
+        <button class="btn-add-entry" data-listkey="${listDef.key}" data-path='${pathStr}'>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add
+        </button>
+      </div>
+      <p class="list-desc">${listDef.desc || ''}</p>
+      <div class="list-entries">`;
+
+  if (entries.length === 0) {
+    html += `<div class="list-empty">No entries. Click Add to create one.</div>`;
+  } else {
+    entries.forEach((entry, idx) => {
+      html += `
+        <div class="list-entry" data-index="${idx}">
+          <span class="list-entry-key">${listDef.key}</span>
+          <input type="text" class="list-entry-input" value="${escapeHtml(entry.value)}"
+            data-listkey="${listDef.key}" data-path='${pathStr}' data-line="${entry.line}" data-idx="${idx}">
+          <button class="btn-delete-entry" data-listkey="${listDef.key}" data-line="${entry.line}" data-idx="${idx}" title="Delete">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>`;
+    });
+  }
+
+  html += `</div></div>`;
+  return html;
+}
+
+function attachControlListeners(container, sub) {
+  const openBtn = container.querySelector('#open-config-btn');
+  if (openBtn) {
+    openBtn.addEventListener('click', async () => {
+      const p = await window.hypr.pickFile();
+      if (p) await loadConfig(p);
+    });
+  }
+
+  container.querySelectorAll('.slider').forEach(input => {
+    const valSpan = document.getElementById(input.id + '-val');
+    input.addEventListener('input', () => {
+      const unit = input.closest('.setting-row')?.querySelector('.slider')?.dataset.unit || '';
+      if (valSpan) valSpan.textContent = input.value + (input.step < 1 ? '' : '');
+      onControlChange(input);
+    });
+  });
+
+  container.querySelectorAll('.toggle-input').forEach(input => {
+    input.addEventListener('change', () => onControlChange(input));
+  });
+
+  container.querySelectorAll('.select-ctrl').forEach(input => {
+    input.addEventListener('change', () => onControlChange(input));
+  });
+
+  container.querySelectorAll('.color-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const colorVal = input.closest('.color-row')?.querySelector('.color-value');
+      if (colorVal) colorVal.textContent = input.value;
+      onControlChange(input);
+    });
+  });
+
+  container.querySelectorAll('.text-input').forEach(input => {
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => onControlChange(input), 600);
+    });
+  });
+
+  container.querySelectorAll('.list-entry-input').forEach(input => {
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => onListEntryChange(input), 600);
+    });
+  });
+
+  container.querySelectorAll('.btn-add-entry').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const listKey = btn.dataset.listkey;
+      const sectionPath = JSON.parse(btn.dataset.path);
+      addListEntry(listKey, sectionPath, sub);
+    });
+  });
+
+  container.querySelectorAll('.btn-delete-entry').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const line = parseInt(btn.dataset.line);
+      deleteListEntry(line, sub);
+    });
+  });
+
+  container.querySelectorAll('.btn-autoset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const sectionPath = JSON.parse(btn.dataset.path);
+      const defaultVal = btn.dataset.default;
+      const type = btn.dataset.type;
+      autoSetSetting(key, sectionPath, defaultVal, type);
+    });
+  });
+}
+
+function onControlChange(input) {
+  const lineIdx = parseInt(input.dataset.line);
+  const type = input.dataset.type;
+  if (lineIdx === -1 || lineIdx === undefined || isNaN(lineIdx)) return; // not in config yet
+
+  let newValue;
+  switch (type) {
+    case 'bool': newValue = input.checked ? 'true' : 'false'; break;
+    case 'color': newValue = hexToHyprColor(input.value, input.dataset.original); break;
+    default: newValue = input.value;
+  }
+
+  applyChange(state.rawLines, lineIdx, newValue);
+  state.dirty = true;
+  updateSaveButton();
+}
+
+function onListEntryChange(input) {
+  const line = parseInt(input.dataset.line);
+  if (isNaN(line) || line < 0) return;
+  applyChange(state.rawLines, line, input.value);
+  state.dirty = true;
+  updateSaveButton();
+}
+
+function autoSetSetting(key, sectionPath, defaultVal, type) {
+  if (!state.root) return;
+
+  const existing = getValueFromPath(sectionPath, key);
+  if (existing) return;
+
+  let insertIdx = null;
+  let node = state.root;
+  for (const seg of sectionPath) {
+    node = node?.children?.[seg];
+  }
+
+  if (node) {
+    const allLines = Object.values(node.children ?? {})
+      .map(n => n.line)
+      .filter(l => l !== undefined && l >= 0);
+    if (allLines.length) {
+      insertIdx = Math.max(...allLines) + 1;
+    }
+  }
+
+  const indent = '    '.repeat(sectionPath.length);
+  const newLine = `${indent}${key} = ${defaultVal}`;
+
+  if (insertIdx !== null) {
+    state.rawLines.splice(insertIdx, 0, newLine);
+  } else {
+    const openLines = sectionPath.map((seg, i) => '    '.repeat(i) + seg + ' {');
+    const closeLines = [...sectionPath].reverse().map((_, i) => '    '.repeat(sectionPath.length - 1 - i) + '}');
+    state.rawLines.push('', ...openLines, newLine, ...closeLines);
+  }
+
+  const parsed = parseConfig(state.rawLines.join('\n'));
+  state.root = parsed.root ?? parsed;
+  state.rawLines = parsed.rawLines ?? state.rawLines;
+
+  state.dirty = true;
+  updateSaveButton();
+  renderActiveSection();
+  showNotification(`Auto-set "${key}" → ${defaultVal}. Adjust and save.`, 'info');
+}
+
+function addListEntry(listKey, sectionPath, sub) {
+  if (!state.root) return;
+  const newLine = `${listKey} = `;
+  state.rawLines.push(newLine);
+  const lineIdx = state.rawLines.length - 1;
+
+  let node = state.root;
+  for (const seg of sectionPath) {
+    node = node._children[seg];
+    if (!node) return;
+  }
+  if (!node._lists[listKey]) node._lists[listKey] = [];
+  node._lists[listKey].push({ value: '', line: lineIdx });
+
+  state.dirty = true;
+  updateSaveButton();
+  renderActiveSection();
+  showNotification('New entry added — edit the value and save.', 'info');
+}
+
+function deleteListEntry(lineIdx, sub) {
+  if (lineIdx < 0 || lineIdx >= state.rawLines.length) return;
+  state.rawLines[lineIdx] = '# ' + state.rawLines[lineIdx] + ' # (deleted by HyprEditor)';
+
+  const { root } = parseConfig(state.rawLines.join('\n'));
+  state.root = root;
+
+  state.dirty = true;
+  updateSaveButton();
+  renderActiveSection();
+  showNotification('Entry removed (commented out). Save to persist.', 'info');
+}
+
+function setupSearch() {
+  const input = $('search-input');
+  const dropdown = $('search-dropdown');
+
+  input.addEventListener('input', () => {
+    state.searchQuery = input.value.trim();
+    if (state.searchQuery.length < 2) {
+      dropdown.classList.add('hidden');
+      return;
+    }
+    if (!state.root) return;
+
+    const results = findAllMatches(state.root, state.searchQuery).slice(0, 12);
+    state.searchResults = results;
+    renderSearchResults(results);
+    dropdown.classList.remove('hidden');
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      input.value = '';
+      dropdown.classList.add('hidden');
+    }
+  });
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.search-wrapper')) {
+      dropdown.classList.add('hidden');
+    }
+  });
+}
+
+function renderSearchResults(results) {
+  const dropdown = $('search-dropdown');
+  if (!results.length) {
+    dropdown.innerHTML = `<div class="search-empty">No results for "${state.searchQuery}"</div>`;
+    return;
+  }
+
+  dropdown.innerHTML = results.map(r => `
+    <div class="search-result" data-path='${JSON.stringify(r.path)}' data-key="${r.key}">
+      <span class="search-result-key">${r.key}</span>
+      <span class="search-result-path">${[...r.path, r.key].join('.')}</span>
+      <span class="search-result-value">${r.value === '[section]' ? '<em>section</em>' : escapeHtml(r.value)}</span>
+    </div>`).join('');
+
+  dropdown.querySelectorAll('.search-result').forEach(el => {
+    el.addEventListener('click', () => {
+      const path = JSON.parse(el.dataset.path);
+      const key = el.dataset.key;
+      navigateToKey(path, key);
+      $('search-dropdown').classList.add('hidden');
+      $('search-input').value = '';
+    });
+  });
+}
+
+function navigateToKey(sectionPath, key) {
+  for (const sec of SECTIONS) {
+    for (const sub of sec.subsections) {
+      const matches = sub.sectionPath.join('.') === sectionPath.join('.');
+      const hasKey = sub.settings?.some(s => s.key === key) || sub.lists?.some(l => l.key === key);
+      if (matches && hasKey) {
+        activateSection(sec, sub);
+        setTimeout(() => {
+          const el = document.querySelector(`[data-key="${key}"]`);
+          if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+          setTimeout(() => el?.classList.remove('highlight'), 2000);
+        }, 100);
+        return;
+      }
+    }
+  }
+}
+
+function setupTitleBar() {
+  $('btn-min').addEventListener('click', () => window.hypr.minimize());
+  $('btn-max').addEventListener('click', () => window.hypr.maximize());
+  $('btn-close').addEventListener('click', () => window.hypr.close());
+
+  $('btn-open').addEventListener('click', async () => {
+    const p = await window.hypr.pickFile();
+    if (p) await loadConfig(p);
+  });
+
+  $('btn-save').addEventListener('click', saveConfig);
+  $('btn-reload').addEventListener('click', async () => {
+    if (state.configPath) await loadConfig(state.configPath);
+  });
+}
+
+function updatePathDisplay() {
+  const el = $('config-path');
+  if (el && state.configPath) {
+    const extra = state.fileSegments.length > 1 ? ` (+${state.fileSegments.length - 1} files)` : '';
+    el.textContent = state.configPath + extra;
+    el.title = state.fileSegments.map(s => s.filePath).join('\n');
+  }
+}
+
+function updateSaveButton() {
+  const btn = $('btn-save');
+  if (!btn) return;
+  btn.classList.toggle('dirty', state.dirty);
+  btn.textContent = state.dirty ? 'Save*' : 'Save';
+}
+
+function showWelcome() {
+  const main = $('main-content');
+  main.innerHTML = `
+    <div class="welcome-screen">
+      <div class="welcome-logo">
+        <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+          <rect width="60" height="60" rx="16" fill="#0d3030"/>
+          <path d="M15 20h30M15 30h20M15 40h25" stroke="#2dd4bf" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="44" cy="30" r="8" fill="#1a5050" stroke="#2dd4bf" stroke-width="2"/>
+          <path d="M41 30l2 2 4-4" stroke="#2dd4bf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h1>HyprEditor</h1>
+      </div>
+      <p>No hyprland.conf found at the default location.<br>Open your config file to get started.</p>
+      <button class="btn-primary large" id="welcome-open">Open Config File</button>
+      <div class="welcome-hint">Typical location: <code>~/.config/hypr/hyprland.conf</code></div>
+    </div>`;
+
+  document.getElementById('welcome-open').addEventListener('click', async () => {
+    const p = await window.hypr.pickFile();
+    if (p) await loadConfig(p);
+  });
+}
+
+function showNotification(msg, type = 'info') {
+  const el = $('notification');
+  el.textContent = msg;
+  el.className = `notification ${type} show`;
+  clearTimeout(state.notifTimer);
+  state.notifTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+function hyprColorToHex(color) {
+  if (!color) return '#000000';
+  // rgba(RRGGBBAA)
+  const rgbaMatch = color.match(/rgba?\(([0-9a-fA-F]+)\)/);
+  if (rgbaMatch) return '#' + rgbaMatch[1].slice(0, 6);
+  // 0xAARRGGBB
+  const hexMatch = color.match(/0x([0-9a-fA-F]{8})/i);
+  if (hexMatch) return '#' + hexMatch[1].slice(2, 8);
+  // plain #hex
+  if (color.startsWith('#')) return color.slice(0, 7);
+  return '#000000';
+}
+
+function hexToHyprColor(hex, original) {
+  if (!original) return `rgba(${hex.slice(1)}ee)`;
+  if (original.startsWith('rgba(')) return `rgba(${hex.slice(1)}${original.slice(-3)}`;
+  if (original.startsWith('rgb(')) return `rgb(${hex.slice(1)})`;
+  if (original.match(/0x[0-9a-fA-F]{8}/i)) return `0xff${hex.slice(1)}`;
+  return hex;
+}
+
+function escapeHtml(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', init);

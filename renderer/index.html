@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HyprEditor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="titlebar" id="titlebar">
+  <div class="titlebar-drag">
+    <div class="app-identity">
+      <svg class="app-logo" viewBox="0 0 28 28" fill="none">
+        <rect width="28" height="28" rx="7" fill="#0d3030"/>
+        <path d="M7 9h14M7 14h9M7 19h11" stroke="#2dd4bf" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="20" cy="14" r="5" fill="#0d3030" stroke="#2dd4bf" stroke-width="1.5"/>
+        <path d="M18 14l1.5 1.5L22 12" stroke="#2dd4bf" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="app-name">HyprEditor</span>
+      <span class="app-tag">config editor</span>
+    </div>
+  </div>
+
+  <div class="titlebar-center">
+    <span class="config-path-display" id="config-path">no config loaded</span>
+  </div>
+
+  <div class="titlebar-actions">
+    <button class="tb-action" id="btn-open" title="Open Config">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Open
+    </button>
+    <button class="tb-action" id="btn-reload" title="Reload Config">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.44"/></svg>
+      Reload
+    </button>
+    <button class="tb-action save" id="btn-save" title="Save Config">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save
+    </button>
+
+    <div class="search-wrapper">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-input" placeholder="search settings…" autocomplete="off" spellcheck="false">
+        <kbd class="search-hint">⌘K</kbd>
+      </div>
+      <div class="search-dropdown hidden" id="search-dropdown"></div>
+    </div>
+
+    <div class="window-controls">
+      <button class="wc-btn minimize" id="btn-min" title="Minimize">
+        <svg viewBox="0 0 12 12" width="10" height="10"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button class="wc-btn maximize" id="btn-max" title="Maximize">
+        <svg viewBox="0 0 12 12" width="10" height="10"><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+      </button>
+      <button class="wc-btn close" id="btn-close" title="Close">
+        <svg viewBox="0 0 12 12" width="10" height="10"><line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="app-layout">
+
+  <aside class="sidebar">
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+
+  <main class="main-area">
+    <div class="main-content" id="main-content">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Searching for hyprland.conf…</p>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<footer class="statusbar">
+  <span class="status-left" id="status-left">HyprEditor v1.0.0</span>
+  <span class="status-mid" id="status-mid"></span>
+  <span class="status-right" id="status-right">ready</span>
+</footer>
+
+<div class="notification" id="notification"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
