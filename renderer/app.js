@@ -6,7 +6,7 @@ let state = {
   rawLines: [],
   root: null,
   includedFiles: [],
-  fileSegments: [],   // [{filePath, startLine, lineCount}] — one per file in load order
+  fileSegments: [],
   activeSection: null,
   activeSubsection: null,
   dirty: false,
@@ -14,6 +14,10 @@ let state = {
   searchResults: [],
   searchOpen: false,
   notification: null,
+
+  previewSetting: null,
+  previewValue: null,
+  confirmOpen: false,
 };
 
 const $ = id => document.getElementById(id);
@@ -103,6 +107,385 @@ async function saveConfig() {
   showNotification(`Saved ${n} file${n > 1 ? 's' : ''}! (backups created as .hypreditor.bak)`, 'success');
 }
 
+function isRiskySetting(setting, nextValue) {
+  const riskyKeys = new Set([
+    'no_hardware_cursors',
+    'use_cpu_buffer',
+    'explicit_sync',
+    'explicit_sync_kms',
+    'direct_scanout',
+    'allow_tearing',
+    'disable_autoreload',
+    'disable_logs',
+    'overlay',
+    'xx_color_management_v4',
+  ]);
+
+  if (setting?.confirm === true) return true;
+  if (setting?.risk === 'high') return true;
+  if (riskyKeys.has(setting?.key)) return true;
+
+  if (setting?.type === 'bool' && setting?.confirmOnEnable && (nextValue === true || nextValue === 'true')) {
+    return true;
+  }
+
+  return false;
+}
+
+function confirmAction({
+  title = 'Are you sure?',
+  message = 'Are you sure you want to do this?',
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  danger = false,
+}) {
+  return new Promise(resolve => {
+    let modal = document.getElementById('confirm-modal');
+
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'confirm-modal';
+      modal.className = 'confirm-modal hidden';
+      modal.innerHTML = `
+        <div class="confirm-backdrop"></div>
+        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+          <div class="confirm-header">
+            <h3 id="confirm-title"></h3>
+          </div>
+          <div class="confirm-body">
+            <p id="confirm-message"></p>
+          </div>
+          <div class="confirm-actions">
+            <button type="button" class="btn-secondary" id="confirm-cancel"></button>
+            <button type="button" class="btn-primary" id="confirm-ok"></button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    modal.querySelector('#confirm-title').textContent = title;
+    modal.querySelector('#confirm-message').textContent = message;
+    modal.querySelector('#confirm-cancel').textContent = cancelText;
+    modal.querySelector('#confirm-ok').textContent = confirmText;
+    modal.querySelector('#confirm-ok').classList.toggle('danger', danger);
+
+    modal.classList.remove('hidden');
+    state.confirmOpen = true;
+
+    const close = value => {
+      modal.classList.add('hidden');
+      state.confirmOpen = false;
+      cleanup();
+      resolve(value);
+    };
+
+    const onCancel = () => close(false);
+    const onOk = () => close(true);
+    const onKey = e => {
+      if (e.key === 'Escape') close(false);
+      if (e.key === 'Enter') close(true);
+    };
+
+    const cancelBtn = modal.querySelector('#confirm-cancel');
+    const okBtn = modal.querySelector('#confirm-ok');
+    const backdrop = modal.querySelector('.confirm-backdrop');
+
+    function cleanup() {
+      cancelBtn.removeEventListener('click', onCancel);
+      okBtn.removeEventListener('click', onOk);
+      backdrop.removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKey);
+    }
+
+    cancelBtn.addEventListener('click', onCancel);
+    okBtn.addEventListener('click', onOk);
+    backdrop.addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKey);
+
+    okBtn.focus();
+  });
+}
+
+function ensurePreviewPane(container) {
+  let pane = document.getElementById('preview-pane');
+  if (pane) return pane;
+
+  pane = document.createElement('aside');
+  pane.id = 'preview-pane';
+  pane.className = 'preview-pane';
+  pane.innerHTML = `
+    <div class="preview-pane-inner">
+      <div class="preview-header">
+        <h3>Live Preview</h3>
+        <span class="preview-subtitle">Visual estimate only</span>
+      </div>
+      <div id="preview-content" class="preview-content"></div>
+    </div>
+  `;
+  container.appendChild(pane);
+  return pane;
+}
+
+function getPreviewType(setting, sectionPath = []) {
+  if (setting.preview?.type) return setting.preview.type;
+
+  const key = setting.key;
+
+  if (['rounding', 'rounding_power'].includes(key)) return 'rounding';
+  if (['border_size', 'col.active_border', 'col.inactive_border'].includes(key)) return 'border';
+  if (['gaps_in', 'gaps_out', 'float_gaps'].includes(key)) return 'gaps';
+  if (['active_opacity', 'inactive_opacity', 'fullscreen_opacity'].includes(key)) return 'opacity';
+  if (['dim_strength', 'dim_inactive', 'dim_special', 'dim_around'].includes(key)) return 'dimming';
+  if (['enabled', 'range', 'render_power', 'scale', 'color', 'color_inactive'].includes(key) && sectionPath.includes('shadow')) return 'shadow';
+  if (['enabled', 'size', 'passes', 'vibrancy', 'noise', 'contrast', 'brightness'].includes(key) && sectionPath.includes('blur')) return 'blur';
+  if (['mfact', 'orientation', 'default_split_ratio', 'layout'].includes(key)) return 'layout';
+  if (['bezier'].includes(key)) return 'bezier';
+  if (['workspace_wraparound'].includes(key)) return 'animation';
+  if (setting.type === 'color') return 'color';
+
+  return 'generic';
+}
+
+function renderPreviewCard(setting, value, sectionPath = []) {
+  const type = getPreviewType(setting, sectionPath);
+  const label = setting?.label || setting?.key || 'Setting';
+  const desc = setting?.desc || 'No description available.';
+  const safeValue = value ?? '(not set)';
+
+  switch (type) {
+    case 'rounding':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="mock-window-wrap">
+            <div class="mock-window mock-rounding" style="border-radius:${Number(value || 0)}px">
+              <div class="mock-titlebar"></div>
+              <div class="mock-body"></div>
+            </div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+
+    case 'border':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="mock-window-wrap">
+            <div class="mock-window mock-border" style="
+              border-width:${Number(value || 1)}px;
+              border-color:${setting.type === 'color' ? escapeHtml(String(value || '#a6adc8')) : '#a6adc8'};
+            ">
+              <div class="mock-titlebar"></div>
+              <div class="mock-body"></div>
+            </div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+
+    case 'gaps':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="workspace-preview" style="--gap:${Math.max(0, Number(value || 0))}px">
+            <div class="tile a"></div>
+            <div class="tile b"></div>
+            <div class="tile c"></div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+
+    case 'opacity':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="opacity-preview">
+            <div class="checker"></div>
+            <div class="opacity-sample" style="opacity:${Math.min(1, Math.max(0, Number(value || 1)))}"></div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+
+    case 'shadow':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="mock-window-wrap shadow-stage">
+            <div class="mock-window shadow-demo" style="box-shadow: 0 12px ${Math.max(8, Number(value || 24))}px rgba(0,0,0,.35)">
+              <div class="mock-titlebar"></div>
+              <div class="mock-body"></div>
+            </div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+
+    case 'blur':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="blur-stage">
+            <div class="blur-bg"></div>
+            <div class="blur-sample" style="backdrop-filter: blur(${Math.max(0, Number(value || 8))}px)"></div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+
+    case 'layout':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="layout-stage">
+            <div class="layout-master"></div>
+            <div class="layout-stack">
+              <div></div>
+              <div></div>
+            </div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+
+    case 'color':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="color-preview">
+            <div class="color-swatch" style="background:${escapeHtml(String(value || '#89b4fa'))}"></div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+    case 'animation':
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="animation-preview">
+            <div class="animation-track">
+              <div class="animation-dot ${value === true || value === 'true' || value === '1' ? 'enabled' : 'disabled'}"></div>
+            </div>
+            <div class="animation-windows">
+              <div class="anim-window left"></div>
+              <div class="anim-window center"></div>
+              <div class="anim-window right"></div>
+            </div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+    case 'generic':
+    default:
+      return `
+        <div class="preview-card">
+          <div class="preview-meta">
+            <div class="preview-title">${escapeHtml(label)}</div>
+            <div class="preview-desc">${escapeHtml(desc)}</div>
+          </div>
+          <div class="preview-generic">
+            <div class="preview-line wide"></div>
+            <div class="preview-line"></div>
+            <div class="preview-line short"></div>
+          </div>
+          <div class="preview-value">Current: ${escapeHtml(String(safeValue))}</div>
+        </div>
+      `;
+  }
+}
+
+function updatePreview(setting, value, sectionPath = []) {
+  state.previewSetting = setting;
+  state.previewValue = value;
+
+  const content = document.getElementById('preview-content');
+  if (!content) return;
+
+  content.innerHTML = renderPreviewCard(setting, value, sectionPath);
+}
+
+function subsectionSupportsPreview(sub) {
+  if (!sub?.settings?.length) return false;
+
+  return sub.settings.some(setting => {
+    if (setting.preview?.type) return true;
+
+    const key = setting.key || '';
+    const path = sub.sectionPath || [];
+
+    if ([
+      'rounding',
+      'rounding_power',
+      'border_size',
+      'col.active_border',
+      'col.inactive_border',
+      'gaps_in',
+      'gaps_out',
+      'float_gaps',
+      'gaps_workspaces',
+      'active_opacity',
+      'inactive_opacity',
+      'fullscreen_opacity',
+      'dim_strength',
+      'dim_inactive',
+      'dim_special',
+      'dim_around',
+      'workspace_wraparound',
+      'mfact',
+      'orientation',
+      'default_split_ratio',
+      'layout'
+    ].includes(key)) return true;
+
+    if (['enabled', 'range', 'render_power', 'scale', 'color', 'color_inactive'].includes(key) && path.includes('shadow')) return true;
+    if (['enabled', 'size', 'passes', 'vibrancy', 'noise', 'contrast', 'brightness'].includes(key) && path.includes('blur')) return true;
+    if (setting.type === 'color') return true;
+
+    return false;
+  });
+}
+
+function installPreviewFallback() {
+  const content = document.getElementById('preview-content');
+  if (!content) return;
+  content.innerHTML = `
+    <div class="preview-empty">
+      <h4>Select a setting</h4>
+      <p>Focus or hover a setting to see a visual preview and description.</p>
+    </div>
+  `;
+}
+
 function buildSidebar() {
   const sidebar = $('sidebar-nav');
   const groups = {};
@@ -172,7 +555,10 @@ function renderActiveSection() {
   html += renderSubsection(sub);
 
   main.innerHTML = html;
-
+  if (subsectionSupportsPreview(sub)) {
+    ensurePreviewPane(main);
+    installPreviewFallback();
+  }
   main.querySelectorAll('.sub-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       const sub = sec.subsections.find(s => s.id === tab.dataset.sub);
@@ -318,13 +704,22 @@ function renderControl(setting, value, sectionPath, lineIdx) {
     }
   }
 
-  return `<div class="setting-row ${notFoundClass}" data-key="${setting.key}">
-    <div class="setting-info">
-      <label class="setting-label" for="${id}">${setting.label}</label>
-      <span class="setting-desc">${setting.desc}</span>
+  return `
+    <div
+      class="setting-row ${notFoundClass}"
+      data-key="${setting.key}"
+      data-label="${escapeHtml(setting.label)}"
+      data-desc="${escapeHtml(setting.desc || '')}"
+      data-type="${escapeHtml(setting.type)}"
+      data-section-path="${escapeHtml(JSON.stringify(sectionPath))}"
+    >
+      <div class="setting-info">
+        <label class="setting-label" for="${id}">${setting.label}</label>
+        <span class="setting-desc">${setting.desc}</span>
+      </div>
+      <div class="setting-control">${controlHtml}</div>
     </div>
-    <div class="setting-control">${controlHtml}</div>
-  </div>`;
+  `;
 }
 
 function renderListSection(listDef, entries, sectionPath) {
@@ -421,33 +816,125 @@ function attachControlListeners(container, sub) {
   });
 
   container.querySelectorAll('.btn-delete-entry').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const line = parseInt(btn.dataset.line);
+    btn.addEventListener('click', async () => {
+      const ok = await confirmAction({
+        title: 'Delete this entry?',
+        message: 'Are you sure you want to delete this list entry? This will comment it out in the config until you save.',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        danger: true,
+      });
+      if (!ok) return;
+
+      const line = parseInt(btn.dataset.line, 10);
       deleteListEntry(line, sub);
     });
   });
 
   container.querySelectorAll('.btn-autoset').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const key = btn.dataset.key;
       const sectionPath = JSON.parse(btn.dataset.path);
       const defaultVal = btn.dataset.default;
       const type = btn.dataset.type;
+
+      const ok = await confirmAction({
+        title: 'Add this setting?',
+        message: `Are you sure you want to insert "${key}" into your config with default value "${defaultVal}"?`,
+        confirmText: 'Insert',
+        cancelText: 'Cancel',
+        danger: false,
+      });
+      if (!ok) return;
+
       autoSetSetting(key, sectionPath, defaultVal, type);
     });
   });
+
+  container.querySelectorAll('.setting-row').forEach(row => {
+    const key = row.dataset.key;
+    const setting = sub.settings?.find(s => s.key === key);
+    if (!setting) return;
+
+    const previewHandler = () => {
+      let currentValue = null;
+      const input =
+        row.querySelector('.slider') ||
+        row.querySelector('.toggle-input') ||
+        row.querySelector('.select-ctrl') ||
+        row.querySelector('.color-input') ||
+        row.querySelector('.text-input');
+
+      if (input) {
+        if (input.classList.contains('toggle-input')) currentValue = input.checked;
+        else currentValue = input.value;
+      }
+
+      updatePreview(setting, currentValue, sub.sectionPath);
+    };
+
+    row.addEventListener('mouseenter', previewHandler);
+    row.addEventListener('focusin', previewHandler);
+  });
+  if (sub?.settings?.length) {
+    const firstSetting = sub.settings[0];
+    const firstRow = container.querySelector(`.setting-row[data-key="${firstSetting.key}"]`);
+    if (firstRow) {
+      let input =
+        firstRow.querySelector('.slider') ||
+        firstRow.querySelector('.toggle-input') ||
+        firstRow.querySelector('.select-ctrl') ||
+        firstRow.querySelector('.color-input') ||
+        firstRow.querySelector('.text-input');
+
+      let currentValue = null;
+      if (input) currentValue = input.classList.contains('toggle-input') ? input.checked : input.value;
+
+      updatePreview(firstSetting, currentValue, sub.sectionPath);
+    }
+  }
 }
 
-function onControlChange(input) {
-  const lineIdx = parseInt(input.dataset.line);
+async function onControlChange(input) {
+  const lineIdx = parseInt(input.dataset.line, 10);
   const type = input.dataset.type;
-  if (lineIdx === -1 || lineIdx === undefined || isNaN(lineIdx)) return; // not in config yet
+
+  if (lineIdx === -1 || lineIdx === undefined || Number.isNaN(lineIdx)) return;
+
+  const row = input.closest('.setting-row');
+  const key = input.dataset.key;
+  const sectionPath = JSON.parse(input.dataset.path || '[]');
+  const sub = state.activeSubsection;
+  const setting = sub?.settings?.find(s => s.key === key);
 
   let newValue;
   switch (type) {
-    case 'bool': newValue = input.checked ? 'true' : 'false'; break;
-    case 'color': newValue = hexToHyprColor(input.value, input.dataset.original); break;
-    default: newValue = input.value;
+    case 'bool':
+      newValue = input.checked ? true : false;
+      break;
+    case 'color':
+      newValue = hexToHyprColor(input.value, input.dataset.original);
+      break;
+    default:
+      newValue = input.value;
+      break;
+  }
+
+  updatePreview(setting || { key, label: key, desc: '' }, newValue, sectionPath);
+
+  if (isRiskySetting(setting, newValue)) {
+    const ok = await confirmAction({
+      title: 'Apply risky setting?',
+      message: `Are you sure you want to change "${setting?.label || key}"? This setting can affect session behavior or rendering.`,
+      confirmText: 'Apply',
+      cancelText: 'Cancel',
+      danger: true,
+    });
+
+    if (!ok) {
+      if (type === 'bool') input.checked = !input.checked;
+      return;
+    }
   }
 
   applyChange(state.rawLines, lineIdx, newValue);

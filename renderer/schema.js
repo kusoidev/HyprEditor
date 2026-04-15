@@ -43,7 +43,6 @@ export const SECTIONS = [
         label: 'Decoration',
         sectionPath: ['decoration'],
         settings: [
-          { key: 'rounding', label: 'Corner Rounding', type: 'range', min: 0, max: 40, step: 1, unit: 'px', desc: 'Rounded corner radius for windows' },
           { key: 'rounding_power', label: 'Rounding Power', type: 'range', min: 1, max: 10, step: 0.1, unit: '', desc: 'Curve power for rounding shape' },
           { key: 'active_opacity', label: 'Active Opacity', type: 'range', min: 0, max: 1, step: 0.01, unit: '', desc: 'Opacity of the focused window' },
           { key: 'inactive_opacity', label: 'Inactive Opacity', type: 'range', min: 0, max: 1, step: 0.01, unit: '', desc: 'Opacity of unfocused windows' },
@@ -55,6 +54,17 @@ export const SECTIONS = [
           { key: 'dim_modal', label: 'Dim Modal', type: 'bool', desc: 'Dim parent windows of modals' },
           { key: 'screen_shader', label: 'Screen Shader', type: 'text', desc: 'Path to a GLSL screen shader file' },
           { key: 'border_part_of_window', label: 'Border Part of Window', type: 'bool', desc: 'Treat borders as part of window geometry' },
+          {
+            key: 'rounding',
+            label: 'Corner Rounding',
+            type: 'range',
+            min: 0,
+            max: 30,
+            step: 1,
+            unit: 'px',
+            desc: 'Rounded corner radius for windows',
+            preview: { type: 'rounding' }
+          },
         ],
       },
       {
@@ -441,7 +451,6 @@ export const SECTIONS = [
         sectionPath: ['cursor'],
         settings: [
           { key: 'invisible', label: 'Invisible Cursor', type: 'bool', desc: 'Do not render cursors' },
-          { key: 'no_hardware_cursors', label: 'No HW Cursors', type: 'select', options: ['0', '1', '2'], desc: '0=use HW, 1=disable HW, 2=auto' },
           { key: 'no_break_fs_vrr', label: 'No Break FS VRR', type: 'select', options: ['0', '1', '2'], desc: 'Keep cursor updates from breaking fullscreen VRR' },
           { key: 'min_refresh_rate', label: 'Min Refresh Rate', type: 'range', min: 1, max: 240, step: 1, unit: 'Hz', desc: 'Minimum VRR refresh rate for cursor' },
           { key: 'hotspot_padding', label: 'Hotspot Padding', type: 'range', min: 0, max: 20, step: 1, unit: 'px', desc: 'Hotspot padding near edges' },
@@ -462,6 +471,15 @@ export const SECTIONS = [
           { key: 'use_cpu_buffer', label: 'Use CPU Buffer', type: 'select', options: ['0', '1', '2'], desc: 'Cursor compositing buffer mode' },
           { key: 'warp_back_after_non_mouse_input', label: 'Warp Back After Non-Mouse Input', type: 'bool', desc: 'Return cursor after non-mouse-driven motion' },
           { key: 'zoom_disable_aa', label: 'Zoom Disable AA', type: 'bool', desc: 'Disable antialiasing while zoomed' },
+          {
+            key: 'no_hardware_cursors',
+            label: 'No HW Cursors',
+            type: 'select',
+            options: ['0', '1', '2'],
+            desc: 'Hardware cursor policy',
+            risk: 'high',
+            confirm: true
+          },
         ],
       },
       {
