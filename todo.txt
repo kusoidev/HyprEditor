@@ -1,0 +1,8 @@
+====TODO LIST====
+
+polish the live preview
+recode to typescript
+test on other distros
+add css config support
+add waybar live preview
+add wallpaper support

@@ -68,6 +68,7 @@ need_file "$SCRIPT_DIR/renderer/style.css"
 need_file "$SCRIPT_DIR/renderer/app.js"
 need_file "$SCRIPT_DIR/renderer/parser.js"
 need_file "$SCRIPT_DIR/renderer/schema.js"
+need_file "$SCRIPT_DIR/renderer/waybar.js"
 
 echo -e "${GREEN}✓ Required files found${NC}"
 
@@ -85,6 +86,7 @@ cp "$SCRIPT_DIR/preload.js"          "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/renderer/index.html" "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/renderer/style.css"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/renderer/app.js"     "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/renderer/waybar.js"     "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/renderer/parser.js"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/renderer/schema.js"  "$INSTALL_DIR/renderer/"
 

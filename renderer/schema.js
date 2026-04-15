@@ -26,7 +26,6 @@ export const SECTIONS = [
           { key: 'allow_tearing', label: 'Allow Tearing', type: 'bool', desc: 'Master switch for tearing support' },
           { key: 'resize_corner', label: 'Resize Corner', type: 'range', min: 0, max: 4, step: 1, unit: '', desc: 'Corner used for floating resize handle, 0 disables' },
           { key: 'snap', label: 'Snap Distance', type: 'range', min: 0, max: 50, step: 1, unit: 'px', desc: 'Floating snap distance threshold' },
-          { key: 'snap', label: 'Snap Distance', type: 'range', min: 0, max: 50, step: 1, unit: 'px', desc: 'Floating snap distance threshold' },
           { key: 'layout', label: 'Default Layout', type: 'select', options: ['dwindle', 'master', 'scrolling', 'monocle'], desc: 'Default tiling layout' },
         ],
       },
@@ -35,44 +34,11 @@ export const SECTIONS = [
         label: "Snap",
         sectionPath: ["general", "snap"],
         settings: [
-          {
-            key: "enabled",
-            label: "Enable Snapping",
-            type: "bool",
-            desc: "Enable snapping for floating windows",
-          },
-          {
-            key: "window_gap",
-            label: "Window Gap",
-            type: "range",
-            min: 0,
-            max: 100,
-            step: 1,
-            unit: "px",
-            desc: "Minimum gap between windows before snapping",
-          },
-          {
-            key: "monitor_gap",
-            label: "Monitor Gap",
-            type: "range",
-            min: 0,
-            max: 100,
-            step: 1,
-            unit: "px",
-            desc: "Minimum gap between a window and monitor edge before snapping",
-          },
-          {
-            key: "border_overlap",
-            label: "Border Overlap",
-            type: "bool",
-            desc: "Snap windows so only one border worth of space remains between them",
-          },
-          {
-            key: "respect_gaps",
-            label: "Respect Gaps",
-            type: "bool",
-            desc: "Respect general:gaps_in when snapping windows",
-          },
+          { key: "enabled", label: "Enable Snapping", type: "bool", desc: "Enable snapping for floating windows" },
+          { key: "window_gap", label: "Window Gap", type: "range", min: 0, max: 100, step: 1, unit: "px", desc: "Minimum gap between windows before snapping" },
+          { key: "monitor_gap", label: "Monitor Gap", type: "range", min: 0, max: 100, step: 1, unit: "px", desc: "Minimum gap between a window and monitor edge before snapping" },
+          { key: "border_overlap", label: "Border Overlap", type: "bool", desc: "Snap windows so only one border worth of space remains between them" },
+          { key: "respect_gaps", label: "Respect Gaps", type: "bool", desc: "Respect general:gaps_in when snapping windows" },
         ],
       },
       {
@@ -149,10 +115,6 @@ export const SECTIONS = [
         sectionPath: ['decoration', 'blur'],
         settings: [
           { key: 'enabled', label: 'Enable Glow', type: 'bool', desc: 'Enable glow effect' },
-          { key: 'range', label: 'Glow Range', type: 'range', min: 0, max: 100, step: 1, unit: 'px', desc: 'Glow rendering distance' },
-          { key: 'render_power', label: 'Glow Power', type: 'range', min: 1, max: 4, step: 1, unit: '', desc: 'Glow falloff sharpness' },
-          { key: 'color', label: 'Glow Color', type: 'color', desc: 'Glow color' },
-          { key: 'color_inactive', label: 'Inactive Glow Color', type: 'color', desc: 'Glow color for inactive windows' },
         ],
       },
     ],
@@ -374,22 +336,8 @@ export const SECTIONS = [
         label: "Virtual Keyboard",
         sectionPath: ["input", "virtual_keyboard"],
         settings: [
-          {
-            key: "share_states",
-            label: "Share States",
-            type: "range",
-            min: 0,
-            max: 2,
-            step: 1,
-            unit: "",
-            desc: "0 = no, 1 = yes, 2 = yes unless IME client",
-          },
-          {
-            key: "release_pressed_on_close",
-            label: "Release Pressed on Close",
-            type: "bool",
-            desc: "Release all pressed keys by virtual keyboard on close",
-          },
+          { key: "share_states", label: "Share States", type: "range", min: 0, max: 2, step: 1, unit: "", desc: "0 = no, 1 = yes, 2 = yes unless IME client" },
+          { key: "release_pressed_on_close", label: "Release Pressed on Close", type: "bool", desc: "Release all pressed keys by virtual keyboard on close" },
         ],
       },
     ],
@@ -523,15 +471,7 @@ export const SECTIONS = [
           { key: 'use_cpu_buffer', label: 'Use CPU Buffer', type: 'select', options: ['0', '1', '2'], desc: 'Cursor compositing buffer mode' },
           { key: 'warp_back_after_non_mouse_input', label: 'Warp Back After Non-Mouse Input', type: 'bool', desc: 'Return cursor after non-mouse-driven motion' },
           { key: 'zoom_disable_aa', label: 'Zoom Disable AA', type: 'bool', desc: 'Disable antialiasing while zoomed' },
-          {
-            key: 'no_hardware_cursors',
-            label: 'No HW Cursors',
-            type: 'select',
-            options: ['0', '1', '2'],
-            desc: 'Hardware cursor policy',
-            risk: 'high',
-            confirm: true
-          },
+          { key: 'no_hardware_cursors', label: 'No HW Cursors', type: 'select', options: ['0', '1', '2'], desc: 'Hardware cursor policy', risk: 'high', confirm: true },
         ],
       },
       {
@@ -542,73 +482,15 @@ export const SECTIONS = [
           { key: 'direct_scanout', label: 'Direct Scanout', type: 'select', options: ['0', '1', '2'], desc: 'Direct scanout policy' },
           { key: 'expand_undersized_textures', label: 'Expand Undersized Textures', type: 'bool', desc: 'Expand undersized textures when needed' },
           { key: 'cm_fs_passthrough', label: 'Fullscreen Color Mgmt Passthrough', type: 'bool', desc: 'Allow fullscreen color-management passthrough' },
-          {
-            key: "xp_mode",
-            label: "XP Mode",
-            type: "bool",
-            desc: "Disable back buffer and bottom layer rendering",
-          },
-          {
-            key: "ctm_animation",
-            label: "CTM Animation",
-            type: "range",
-            min: 0,
-            max: 2,
-            step: 1,
-            unit: "",
-            desc: "Fade animation mode for CTM changes",
-          },
-          {
-            key: "cm_enabled",
-            label: "Color Management Enabled",
-            type: "bool",
-            desc: "Enable the color management pipeline",
-          },
-          {
-            key: "send_content_type",
-            label: "Send Content Type",
-            type: "bool",
-            desc: "Report content type to allow monitor profile autoswitch",
-          },
-          {
-            key: "cm_auto_hdr",
-            label: "Auto HDR",
-            type: "range",
-            min: 0,
-            max: 2,
-            step: 1,
-            unit: "",
-            desc: "0 off, 1 hdr, 2 hdredid",
-          },
-          {
-            key: "new_render_scheduling",
-            label: "New Render Scheduling",
-            type: "bool",
-            desc: "Use triple buffering automatically when needed",
-          },
-          {
-            key: "non_shader_cm",
-            label: "Non-Shader Color Mgmt",
-            type: "range",
-            min: 0,
-            max: 3,
-            step: 1,
-            unit: "",
-            desc: "Color management without shader mode",
-          },
-          {
-            key: "cm_sdr_eotf",
-            label: "SDR EOTF",
-            type: "select",
-            options: ["default", "gamma22", "gamma22force", "srgb"],
-            desc: "Default transfer function for SDR apps",
-          },
-          {
-            key: "commit_timing_enabled",
-            label: "Commit Timing Enabled",
-            type: "bool",
-            desc: "Enable commit timing protocol",
-          },
+          { key: "xp_mode", label: "XP Mode", type: "bool", desc: "Disable back buffer and bottom layer rendering" },
+          { key: "ctm_animation", label: "CTM Animation", type: "range", min: 0, max: 2, step: 1, unit: "", desc: "Fade animation mode for CTM changes" },
+          { key: "cm_enabled", label: "Color Management Enabled", type: "bool", desc: "Enable the color management pipeline" },
+          { key: "send_content_type", label: "Send Content Type", type: "bool", desc: "Report content type to allow monitor profile autoswitch" },
+          { key: "cm_auto_hdr", label: "Auto HDR", type: "range", min: 0, max: 2, step: 1, unit: "", desc: "0 off, 1 hdr, 2 hdredid" },
+          { key: "new_render_scheduling", label: "New Render Scheduling", type: "bool", desc: "Use triple buffering automatically when needed" },
+          { key: "non_shader_cm", label: "Non-Shader Color Mgmt", type: "range", min: 0, max: 3, step: 1, unit: "", desc: "Color management without shader mode" },
+          { key: "cm_sdr_eotf", label: "SDR EOTF", type: "select", options: ["default", "gamma22", "gamma22force", "srgb"], desc: "Default transfer function for SDR apps" },
+          { key: "commit_timing_enabled", label: "Commit Timing Enabled", type: "bool", desc: "Enable commit timing protocol" },
         ],
       },
       {
@@ -665,16 +547,8 @@ export const SECTIONS = [
         label: 'Window Rules',
         sectionPath: [],
         lists: [
-          {
-            key: "windowrule",
-            label: "Window Rules",
-            desc: "Anonymous or legacy-compatible window rules",
-          },
-          {
-            key: "windowrulev2",
-            label: "Window Rules V2",
-            desc: "Modern window rules using match filters and effects",
-          },
+          { key: "windowrule", label: "Window Rules", desc: "Anonymous or legacy-compatible window rules" },
+          { key: "windowrulev2", label: "Window Rules V2", desc: "Modern window rules using match filters and effects" },
         ],
         settings: [],
       },
@@ -793,6 +667,49 @@ export const SECTIONS = [
         lists: [
           { key: 'source', label: 'Source Directives', desc: 'Included config files' },
         ],
+        settings: [],
+      },
+    ],
+  },
+  {
+    id: 'waybar',
+    label: 'Waybar',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="4" width="20" height="4" rx="1"/>
+      <line x1="6" y1="6" x2="6" y2="6.01"/>
+      <line x1="10" y1="6" x2="10" y2="6.01"/>
+      <path d="M14 6h4"/>
+    </svg>`,
+    group: 'TOOLS',
+    subsections: [
+      {
+        id: 'waybar_style',
+        label: 'CSS Style',
+        type: 'waybar-editor',
+        settings: [],
+      },
+      {
+        id: 'waybar_config',
+        label: 'Config',
+        type: 'waybar-config-editor',
+        settings: [],
+      },
+    ],
+  },
+  {
+    id: 'wallpaper',
+    label: 'Wallpaper',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </svg>`,
+    group: 'TOOLS',
+    subsections: [
+      {
+        id: 'wallpaper_browser',
+        label: 'Browse',
+        type: 'wallpaper-browser',
         settings: [],
       },
     ],

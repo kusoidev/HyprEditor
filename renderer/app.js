@@ -1,4 +1,5 @@
 import { parseConfig, getValue, getList, applyChange, serializeConfig, getAllSources, findAllMatches } from './parser.js';
+import { initWaybarSection, renderWaybarSection, initWaybarConfigSection, renderWaybarConfigSection, initWallpaperSection, renderWallpaperSection } from './waybar.js';
 import { SECTIONS } from './schema.js';
 
 let state = {
@@ -31,6 +32,9 @@ async function init() {
   const found = await window.hypr.findConfig();
   if (found) {
     await loadConfig(found);
+    await initWaybarSection();
+    await initWaybarConfigSection();
+    await initWallpaperSection();
   } else {
     showWelcome();
   }
@@ -611,8 +615,27 @@ function renderAboutSection() {
 }
 
 function renderActiveSection() {
+  const sub = state.activeSubsection;
+
+  if (sub?.type === 'waybar-editor') {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) renderWaybarSection(mainContent);
+    return;
+  }
+  if (sub?.type === 'waybar-config-editor') {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) renderWaybarConfigSection(mainContent);
+    return;
+  }
+  if (sub?.type === 'wallpaper-browser') {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) renderWallpaperSection(mainContent);
+    return;
+  }
+
   const main = $('main-content');
   const sec = state.activeSection;
+
   if (sec?.id === "about") {
     main.innerHTML = renderAboutSection();
     return;
@@ -626,32 +649,32 @@ function renderActiveSection() {
 
   if (sec.subsections.length > 1) {
     html += `<div class="subsection-tabs">`;
-    for (const sub of sec.subsections) {
-      const active = state.activeSubsection?.id === sub.id ? 'active' : '';
-      html += `<button class="sub-tab ${active}" data-sub="${sub.id}">${sub.label}</button>`;
+    for (const s of sec.subsections) {
+      const active = state.activeSubsection?.id === s.id ? 'active' : '';
+      html += `<button class="sub-tab ${active}" data-sub="${s.id}">${s.label}</button>`;
     }
     html += `</div>`;
   }
 
-  const sub = state.activeSubsection || sec.subsections[0];
-  html += renderSubsection(sub);
+  const activeSub = state.activeSubsection || sec.subsections[0];
+  html += renderSubsection(activeSub);
 
   main.innerHTML = html;
-  if (subsectionSupportsPreview(sub)) {
+  if (subsectionSupportsPreview(activeSub)) {
     ensurePreviewPane(main);
     installPreviewFallback();
   }
   main.querySelectorAll('.sub-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      const sub = sec.subsections.find(s => s.id === tab.dataset.sub);
-      if (sub) {
-        state.activeSubsection = sub;
+      const found = sec.subsections.find(s => s.id === tab.dataset.sub);
+      if (found) {
+        state.activeSubsection = found;
         renderActiveSection();
       }
     });
   });
 
-  attachControlListeners(main, sub);
+  attachControlListeners(main, activeSub);
 }
 
 function renderSubsection(sub) {
@@ -851,8 +874,7 @@ function attachControlListeners(container, sub) {
   container.querySelectorAll('.slider').forEach(input => {
     const valSpan = document.getElementById(input.id + '-val');
     input.addEventListener('input', () => {
-      const unit = input.closest('.setting-row')?.querySelector('.slider')?.dataset.unit || '';
-      if (valSpan) valSpan.textContent = input.value + (input.step < 1 ? '' : '');
+      if (valSpan) valSpan.textContent = input.value;
       onControlChange(input);
     });
   });
@@ -958,6 +980,7 @@ function attachControlListeners(container, sub) {
     row.addEventListener('mouseenter', previewHandler);
     row.addEventListener('focusin', previewHandler);
   });
+
   if (sub?.settings?.length) {
     const firstSetting = sub.settings[0];
     const firstRow = container.querySelector(`.setting-row[data-key="${firstSetting.key}"]`);
@@ -983,7 +1006,6 @@ async function onControlChange(input) {
 
   if (lineIdx === -1 || lineIdx === undefined || Number.isNaN(lineIdx)) return;
 
-  const row = input.closest('.setting-row');
   const key = input.dataset.key;
   const sectionPath = JSON.parse(input.dataset.path || '[]');
   const sub = state.activeSubsection;
@@ -1167,7 +1189,7 @@ function renderSearchResults(results) {
 function navigateToKey(sectionPath, key) {
   for (const sec of SECTIONS) {
     for (const sub of sec.subsections) {
-      const matches = sub.sectionPath.join('.') === sectionPath.join('.');
+      const matches = sub.sectionPath?.join('.') === sectionPath.join('.');
       const hasKey = sub.settings?.some(s => s.key === key) || sub.lists?.some(l => l.key === key);
       if (matches && hasKey) {
         activateSection(sec, sub);
@@ -1248,16 +1270,13 @@ function showNotification(msg, type = 'info') {
 }
 
 function hyprColorToHex(color) {
-  if (!color) return '#000000';
-  // rgba(RRGGBBAA)
+  if (!color) return '000000';
   const rgbaMatch = color.match(/rgba?\(([0-9a-fA-F]+)\)/);
-  if (rgbaMatch) return '#' + rgbaMatch[1].slice(0, 6);
-  // 0xAARRGGBB
+  if (rgbaMatch) return rgbaMatch[1].slice(0, 6);
   const hexMatch = color.match(/0x([0-9a-fA-F]{8})/i);
-  if (hexMatch) return '#' + hexMatch[1].slice(2, 8);
-  // plain #hex
-  if (color.startsWith('#')) return color.slice(0, 7);
-  return '#000000';
+  if (hexMatch) return hexMatch[1].slice(2, 8);
+  if (color.startsWith('#')) return color.slice(1, 7);
+  return '000000';
 }
 
 function hexToHyprColor(hex, original) {

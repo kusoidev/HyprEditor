@@ -88,6 +88,8 @@ You can restore it with:
 cp ~/.config/hypr/hyprland.conf.hypreditor.bak ~/.config/hypr/hyprland.conf
 ```
 
+**Note**: There's now a new button where u can manually press to restore from backup.
+
 ## AI usage note
 
 This project was built by me in my free time, and some parts of it were developed with AI assistance.
