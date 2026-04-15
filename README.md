@@ -86,6 +86,14 @@ You can restore it with:
 cp ~/.config/hypr/hyprland.conf.hypreditor.bak ~/.config/hypr/hyprland.conf
 ```
 
+## AI usage note
+
+This project was built by me in my free time, and some parts of it were developed with AI assistance.
+
+AI was used as a coding assistant for things like brainstorming, debugging help, refactoring suggestions, and parts of the HTML/CSS/UI work. The project is not fully AI generated, and I still review, modify, and test the code myself before keeping changes.
+
+I’m adding this note for transparency since I know some people care about how software is made, especially in open source projects.
+
 ## Limitations
 
 - This project is still incomplete and being polished.
