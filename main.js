@@ -47,6 +47,43 @@ function findHyprlandConfig() {
   return null;
 }
 
+function restoreBackupFile(filePath) {
+  const backup = filePath + '.hypreditor.bak';
+
+  if (!fs.existsSync(backup)) {
+    return { ok: false, error: 'backup file not found', filePath };
+  }
+
+  try {
+    fs.copyFileSync(backup, filePath);
+    return { ok: true, filePath, backup };
+  } catch (e) {
+    return { ok: false, error: e.message, filePath };
+  }
+}
+
+ipcMain.handle('restore-backups', (_, filePaths) => {
+  try {
+    const results = [];
+
+    for (const filePath of filePaths) {
+      results.push(restoreBackupFile(filePath));
+    }
+
+    const restored = results.filter(r => r.ok).length;
+    const failed = results.filter(r => !r.ok);
+
+    return {
+      ok: failed.length === 0,
+      restored,
+      failed,
+      results,
+    };
+  } catch (e) {
+    return { ok: false, error: e.message, restored: 0, failed: [] };
+  }
+});
+
 ipcMain.handle('find-config', () => {
   return findHyprlandConfig();
 });

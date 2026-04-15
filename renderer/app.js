@@ -81,6 +81,41 @@ async function loadConfig(filePath) {
   showNotification(`Loaded: ${filePath.split('/').pop()}${extra}`, 'success');
 }
 
+async function restoreBackups() {
+  if (!state.configPath) return;
+
+  const filePaths = state.fileSegments.map(seg => seg.filePath);
+
+  const ok = await confirmAction({
+    title: 'Restore backups?',
+    message: `This will overwrite the current config with the last .hypreditor.bak backup for ${filePaths.length} file${filePaths.length > 1 ? 's' : ''}.`,
+    confirmText: 'Restore',
+    cancelText: 'Cancel',
+    danger: true,
+  });
+
+  if (!ok) return;
+
+  const res = await window.hypr.restoreBackups(filePaths);
+
+  if (!res.ok && !res.restored) {
+    showNotification(res.error || 'Restore failed.', 'error');
+    return;
+  }
+
+  if (res.failed?.length) {
+    const first = res.failed[0];
+    showNotification(
+      `Restored ${res.restored} file(s), but some failed: ${first.filePath?.split('/').pop() || first.error}`,
+      'error'
+    );
+  } else {
+    showNotification(`Restored ${res.restored} backup file${res.restored > 1 ? 's' : ''}.`, 'success');
+  }
+
+  await loadConfig(state.configPath);
+}
+
 async function saveConfig() {
   if (!state.configPath || !state.dirty) return;
 
@@ -1158,6 +1193,7 @@ function setupTitleBar() {
   });
 
   $('btn-save').addEventListener('click', saveConfig);
+  $('btn-restore').addEventListener('click', restoreBackups);
   $('btn-reload').addEventListener('click', async () => {
     if (state.configPath) await loadConfig(state.configPath);
   });

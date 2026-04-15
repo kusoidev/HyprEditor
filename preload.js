@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('hypr', {
   maximize: () => ipcRenderer.invoke('window-maximize'),
   close: () => ipcRenderer.invoke('window-close'),
   reload: () => ipcRenderer.invoke('reload'),
+  restoreBackups: (filePaths) => ipcRenderer.invoke('restore-backups', filePaths),
 });
