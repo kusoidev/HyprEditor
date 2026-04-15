@@ -94,7 +94,7 @@ ipcMain.handle('get-included-files', (_, configPath, sources) => {
     if (fs.existsSync(resolved)) {
       try {
         found.push({ path: resolved, content: fs.readFileSync(resolved, 'utf8'), source: src });
-      } catch {}
+      } catch { }
     }
   }
   return found;
