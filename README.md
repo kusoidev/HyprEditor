@@ -10,7 +10,7 @@ HyprEditor is currently **early-stage** and under active development in my spare
 
 If you prefer editing your config by hand, that workflow is still valid. HyprEditor is meant to be an alternative for people who want sliders, toggles, pickers, and searchable sections instead of constantly jumping between config files and documentation. 
 
-**Note**: This has only been tested in CachyOS and in my specific workflow, i can not guarantee that it will work on other linux distros.
+**Note:** This has only been tested on CachyOS and within my own workflow so far. I can’t guarantee that it will work correctly on other Linux distributions or setups yet.
 
 ## What it does
 
