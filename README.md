@@ -2,11 +2,11 @@
 
 A visual desktop editor for Hyprland configuration files.
 
-HyprEditor is a personal free-time project built as an alternative to manually editing `hyprland.conf` in a terminal or text editor. It is still early, still being polished, and not every part of Hyprland is covered perfectly yet — but the goal is to make common configuration changes easier, safer, and more approachable. [file:36]
+HyprEditor is a personal free-time project built as an alternative to manually editing `hyprland.conf` in a terminal or text editor. It is still early, still being polished, and not every part of Hyprland is covered perfectly yet — but the goal is to make common configuration changes easier, safer, and more approachable.
 
 ## Status
 
-HyprEditor is currently **early-stage** and under active development in my spare time. Expect rough edges, incomplete previews, and parts of the UI that will improve over time. [file:36]
+HyprEditor is currently **early-stage** and under active development in my spare time. Expect rough edges, incomplete previews, and parts of the UI that will improve over time.
 
 If you prefer editing your config by hand, that workflow is still valid. HyprEditor is meant to be an alternative for people who want sliders, toggles, pickers, and searchable sections instead of constantly jumping between config files and documentation. 
 
