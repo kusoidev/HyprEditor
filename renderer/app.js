@@ -615,32 +615,16 @@ function renderAboutSection() {
 }
 
 function renderActiveSection() {
-  const sub = state.activeSubsection;
-
-  if (sub?.type === 'waybar-editor') {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) renderWaybarSection(mainContent);
-    return;
-  }
-  if (sub?.type === 'waybar-config-editor') {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) renderWaybarConfigSection(mainContent);
-    return;
-  }
-  if (sub?.type === 'wallpaper-browser') {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) renderWallpaperSection(mainContent);
-    return;
-  }
-
   const main = $('main-content');
   const sec = state.activeSection;
+  const sub = state.activeSubsection;
 
-  if (sec?.id === "about") {
+  if (!sec) { main.innerHTML = '<div class="empty-state">Select a section</div>'; return; }
+
+  if (sec.id === 'about') {
     main.innerHTML = renderAboutSection();
     return;
   }
-  if (!sec) { main.innerHTML = '<div class="empty-state">Select a section</div>'; return; }
 
   let html = `<div class="section-header">
     <h2 class="section-title">${sec.label}</h2>
@@ -656,14 +640,16 @@ function renderActiveSection() {
     html += `</div>`;
   }
 
-  const activeSub = state.activeSubsection || sec.subsections[0];
-  html += renderSubsection(activeSub);
+  const isSpecial = sub?.type === 'waybar-editor'
+    || sub?.type === 'waybar-config-editor'
+    || sub?.type === 'wallpaper-browser';
+
+  if (isSpecial) {
+    html += `<div id="special-section-content" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>`;
+  }
 
   main.innerHTML = html;
-  if (subsectionSupportsPreview(activeSub)) {
-    ensurePreviewPane(main);
-    installPreviewFallback();
-  }
+
   main.querySelectorAll('.sub-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       const found = sec.subsections.find(s => s.id === tab.dataset.sub);
@@ -673,6 +659,32 @@ function renderActiveSection() {
       }
     });
   });
+
+  if (sub?.type === 'waybar-editor') {
+    const container = document.getElementById('special-section-content');
+    if (container) renderWaybarSection(container);
+    return;
+  }
+
+  if (sub?.type === 'waybar-config-editor') {
+    const container = document.getElementById('special-section-content');
+    if (container) renderWaybarConfigSection(container);
+    return;
+  }
+
+  if (sub?.type === 'wallpaper-browser') {
+    const container = document.getElementById('special-section-content');
+    if (container) renderWallpaperSection(container);
+    return;
+  }
+
+  const activeSub = state.activeSubsection || sec.subsections[0];
+  main.insertAdjacentHTML('beforeend', renderSubsection(activeSub));
+
+  if (subsectionSupportsPreview(activeSub)) {
+    ensurePreviewPane(main);
+    installPreviewFallback();
+  }
 
   attachControlListeners(main, activeSub);
 }
