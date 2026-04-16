@@ -42,6 +42,31 @@ class WaybarManager {
       current: null,
       scanDirs: this.StorageGetJSON(this.STORAGE_KEYS.SCAN_DIRS, null) || [...this.DEFAULT_SCAN_DIRS],
     };
+
+    this.sys = {
+      bat: 100,
+      charging: false,
+      cpu: 10,
+      temp: 40,
+      up: 1.0,
+      down: 2.0,
+      vol: 50
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.getBattery) {
+      navigator.getBattery().then(b => {
+        this.sys.bat = Math.round(b.level * 100);
+        this.sys.charging = b.charging;
+        b.addEventListener('levelchange', () => {
+          this.sys.bat = Math.round(b.level * 100);
+          this.RenderPreview();
+        });
+        b.addEventListener('chargingchange', () => {
+          this.sys.charging = b.charging;
+          this.RenderPreview();
+        });
+      });
+    }
   }
 
   StorageGet(key) {
@@ -191,17 +216,17 @@ class WaybarManager {
 
           <div class="waybar-preview-pane" style="flex:1;display:flex;flex-direction:column;min-width:0;">
             ${this.BuildPreviewHeader('waybar-wp-btn')}
-            <div class="waybar-preview-wrap" style="flex:1;min-height:0;position:relative;">
-              <iframe
-                id="waybar-preview-frame"
-                class="waybar-preview-frame"
-                sandbox="allow-same-origin allow-scripts"
-                title="Waybar Preview"
-                style="width:100%;height:100%;border:none;display:block;"
-              ></iframe>
+            <div class="waybar-preview-wrap" style="flex:1;min-height:0;position:relative;overflow-x:auto;">
+            <iframe
+              id="waybar-preview-frame"
+              class="waybar-preview-frame"
+              sandbox="allow-same-origin" 
+              title="Waybar Preview"
+              style="width:100%;height:100%;border:none;display:block;"
+            ></iframe>
             </div>
             <p class="waybar-preview-note" style="margin-top:6px;font-size:11px;opacity:.5;">
-              This is just a visual representation.
+              Rendered from your config + CSS. Changes update live.
             </p>
           </div>
         </div>
@@ -405,14 +430,14 @@ class WaybarManager {
 
           <div class="waybar-preview-pane" style="flex:1;display:flex;flex-direction:column;min-width:0;">
             ${this.BuildPreviewHeader('waybar-config-wp-btn')}
-            <div class="waybar-preview-wrap" style="flex:1;min-height:0;position:relative;">
-              <iframe
-                id="waybar-preview-frame"
-                class="waybar-preview-frame"
-                sandbox="allow-same-origin allow-scripts"
-                title="Waybar Preview"
-                style="width:100%;height:100%;border:none;display:block;"
-              ></iframe>
+            <div class="waybar-preview-wrap" style="flex:1;min-height:0;position:relative;overflow-x:auto;">
+            <iframe
+              id="waybar-preview-frame"
+              class="waybar-preview-frame"
+              sandbox="allow-same-origin" 
+              title="Waybar Preview"
+              style="width:100%;height:100%;border:none;display:block;"
+            ></iframe>
             </div>
             <p class="waybar-preview-note" style="margin-top:6px;font-size:11px;opacity:.5;">
               Rendered from your config + CSS. Changes update live.
@@ -577,6 +602,10 @@ class WaybarManager {
 
   SchedulePreview() {
     clearTimeout(this.waybarState.previewDebounce);
+    this.sys.cpu = Math.floor(Math.random() * 20) + 5;
+    this.sys.temp = Math.floor(Math.random() * 15) + 35;
+    this.sys.up = (Math.random() * 5).toFixed(1);
+    this.sys.down = (Math.random() * 10).toFixed(1);
     this.waybarState.previewDebounce = setTimeout(() => this.RenderPreview(), 180);
   }
 
@@ -588,145 +617,195 @@ class WaybarManager {
     return JSON.parse(stripped);
   }
 
+  GetIconByPercent(icons, percent) {
+    if (!Array.isArray(icons) || !icons.length) return '';
+    const p = Math.max(0, Math.min(100, Number(percent) || 0));
+    const idx = Math.min(icons.length - 1, Math.floor((p / 100) * icons.length));
+    return icons[idx] ?? icons[icons.length - 1] ?? '';
+  }
+
+  GetBatteryIcon(cfg, capacity = 96, charging = false, plugged = false) {
+    if (charging && cfg?.['format-charging']) return '';
+    if (plugged && cfg?.['format-plugged']) return '';
+    if (capacity >= 95 && cfg?.['format-full']) return '';
+
+    const icons = cfg?.['format-icons'];
+    if (Array.isArray(icons) && icons.length) {
+      const idx = Math.max(0, Math.min(icons.length - 1, Math.floor((capacity / 100) * icons.length)));
+      return icons[idx] || icons[icons.length - 1] || '';
+    }
+
+    if (icons && typeof icons === 'object') {
+      if (capacity <= (cfg?.states?.critical ?? 15) && icons.critical) return icons.critical;
+      if (capacity <= (cfg?.states?.warning ?? 30) && icons.warning) return icons.warning;
+      if (capacity >= (cfg?.states?.good ?? 85) && icons.good) return icons.good;
+      if (icons.default) return Array.isArray(icons.default) ? (icons.default[0] || '') : icons.default;
+    }
+
+    return '';
+  }
+
+  GetVolumeIcon(cfg, volume = 40, muted = false) {
+    if (muted) return '󰖁';
+
+    const icons = cfg?.['format-icons'];
+    if (!icons) return '󰕾';
+
+    if (Array.isArray(icons)) {
+      const idx = volume <= 33 ? 0 : volume <= 66 ? 1 : 2;
+      return icons[Math.min(idx, icons.length - 1)] || icons[icons.length - 1] || '󰕾';
+    }
+
+    if (typeof icons === 'object') {
+      if (icons.headphone) return icons.headphone;
+      if (icons.headset) return icons.headset;
+      const d = icons.default;
+      if (Array.isArray(d)) {
+        const idx = volume <= 33 ? 0 : volume <= 66 ? 1 : 2;
+        return d[Math.min(idx, d.length - 1)] || d[d.length - 1] || '󰕾';
+      }
+      if (d) return d;
+    }
+
+    return '󰕾';
+  }
+
   RenderModule(name, cfg, now) {
-    const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const cssId = name.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     if (name === 'hyprland/workspaces') {
       const fmt = cfg?.format || '{name}';
-      const btns = [1, 2, 3, 4, 5].map(i =>
-        `<button class="workspace-button${i === 1 ? ' active focused' : ''}">${fmt.replace('{name}', i).replace('{id}', i)}</button>`
-      ).join('');
+      const workspaces = [1, 2, 6, 7, 8];
+      const btns = workspaces.map(i => {
+        const active = i === 8 ? ' active focused' : '';
+        return `<button class="workspace-button${active}">${fmt.replace('{name}', i).replace('{id}', i)}</button>`;
+      }).join('');
       return `<div id="${cssId}" class="module workspaces">${btns}</div>`;
     }
 
     if (name === 'clock') {
-      const fmt = cfg?.format || '{:%H:%M}';
-      const dow = now.toLocaleDateString([], { weekday: 'short' });
-      const dd = String(now.getDate()).padStart(2, '0');
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const yyyy = now.getFullYear();
-      const clockText = fmt.replace(/\{:[^}]+\}/g, m => {
-        const spec = m.slice(2, -1);
-        return spec
-          .replace('%a', dow)
-          .replace('%d', dd)
-          .replace('%m', mm)
-          .replace('%Y', yyyy)
-          .replace('%H', time.split(':')[0])
-          .replace('%M', time.split(':')[1] || '00');
-      });
-      return `<div id="${cssId}" class="module clock">${clockText}</div>`;
+      const fmt = cfg?.format || '{:%a %d/%m/%Y ~ %H:%M}';
+      return `<div id="${cssId}" class="module clock">${fmt
+        .replace('{:%a %d/%m/%Y ~ %H:%M}', `${now.toLocaleDateString([], { weekday: 'short' })} ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ~ ${time}`)
+        .replace(/\{[^}]+\}/g, '')}</div>`;
+    }
+
+    if (name === 'custom/power') {
+      return `<div id="${cssId}" class="module custom-power">${cfg?.format || '⭘'}</div>`;
     }
 
     if (name === 'cpu') {
-      const fmt = (cfg?.format || ' {usage}%')
-        .replace('{usage}', '12')
-        .replace('{load}', '0.42')
-        .replace('{avg_frequency}', '3.2')
-        .replace(/\{[^}]+\}/g, '');
+      const fmt = (cfg?.format || ' {usage}%').replace('{usage}', String(this.sys.cpu)).replace(/\{[^}]+\}/g, '');
       return `<div id="${cssId}" class="module cpu">${fmt}</div>`;
     }
 
     if (name === 'temperature') {
-      const fmt = (cfg?.format || ' {temperatureC}°C')
-        .replace('{temperatureC}', '65')
-        .replace('{temperatureF}', '149')
-        .replace(/\{[^}]+\}/g, '');
+      const temp = this.sys.temp;
+      const sourceFmt = temp >= (cfg?.['critical-threshold'] ?? 80)
+        ? (cfg?.['format-critical'] || cfg?.format || ' {temperatureC}°C')
+        : (cfg?.format || ' {temperatureC}°C');
+      const fmt = sourceFmt.replace('{temperatureC}', String(temp)).replace(/\{[^}]+\}/g, '');
       return `<div id="${cssId}" class="module temperature">${fmt}</div>`;
     }
 
-    if (name === 'memory') {
-      const fmt = (cfg?.format || ' {used:0.1f}G').replace(/\{[^}]+\}/g, '4.2G');
-      return `<div id="${cssId}" class="module memory">${fmt}</div>`;
+    if (name === 'custom/cava') {
+      return `<div id="${cssId}" class="module custom-cava">▁▂▃▄▅▆▇▄▂</div>`;
     }
 
-    if (name === 'disk') {
-      const fmt = (cfg?.format || '󰋊 {percentage_used}%')
-        .replace('{percentage_used}', '42')
-        .replace('{free}', '120G')
-        .replace(/\{[^}]+\}/g, '');
-      return `<div id="${cssId}" class="module disk">${fmt}</div>`;
+    if (name === 'tray') {
+      return `<div id="${cssId}" class="module tray"><span class="tray-item">󰂯</span><span class="tray-item">󰊴</span></div>`;
     }
 
-    if (name === 'battery') {
-      const rawIcons = cfg?.['format-icons'] || [' ', ' ', ' ', ' ', ' '];
-      const icon = Array.isArray(rawIcons) ? rawIcons[rawIcons.length - 1] : String(rawIcons);
-      const fmt = (cfg?.format || '{icon} {capacity}%')
-        .replace('{icon}', icon)
-        .replace('{capacity}', '87')
-        .replace(/\{[^}]+\}/g, '');
-      return `<div id="${cssId}" class="module battery">${fmt}</div>`;
-    }
-
-    if (name === 'pulseaudio' || name === 'wireplumber') {
-      const icons = cfg?.['format-icons'];
-      let icon = ' ';
-      if (icons && typeof icons === 'object' && !Array.isArray(icons)) {
-        const d = icons.default;
-        icon = Array.isArray(d) ? (d[0] || icon) : (d || icon);
-      } else if (Array.isArray(icons)) {
-        icon = icons[icons.length - 1] || icon;
-      }
-      const fmt = (cfg?.format || '{icon} {volume}%')
-        .replace('{icon}', icon)
-        .replace('{volume}', '65')
-        .replace('{desc}', 'Speakers')
-        .replace(/\{[^}]+\}/g, '');
-      return `<div id="${cssId}" class="module pulseaudio">${fmt}</div>`;
+    if (name === 'bluetooth') {
+      return `<div id="${cssId}" class="module bluetooth">${cfg?.['format-connected'] || cfg?.format || ' 󰂱 '}</div>`;
     }
 
     if (name === 'network') {
-      const fmt = (cfg?.['format-wifi'] || '  {essid}')
-        .replace('{essid}', 'WiFi')
-        .replace('{bandwidthUpBytes}', '↑1.2M')
-        .replace('{bandwidthDownBytes}', '↓3.4M')
-        .replace('{signalStrength}', '80')
+      const sourceFmt = cfg?.['format-wifi'] || cfg?.['format-ethernet'] || '  {essid}  {bandwidthUpBytes}  {bandwidthDownBytes}';
+      const fmt = sourceFmt
+        .replace('{essid}', 'Wi-Fi')
         .replace('{ifname}', 'wlan0')
         .replace(/\{[^}]+\}/g, '');
       return `<div id="${cssId}" class="module network">${fmt}</div>`;
     }
 
-    if (name === 'bluetooth') {
-      const fmt = cfg?.['format-connected'] || cfg?.format || ' 󰂯 ';
-      return `<div id="${cssId}" class="module bluetooth">${fmt}</div>`;
-    }
+    if (name === 'battery') {
+      const capacity = this.sys.bat;
+      const charging = this.sys.charging;
+      const plugged = this.sys.charging;
+      const iconList = cfg?.['format-icons'];
 
-    if (name === 'tray') {
-      return `<div id="${cssId}" class="module tray"></div>`;
-    }
+      let icon = '';
+      if (Array.isArray(iconList) && iconList.length) {
+        const idx = Math.min(iconList.length - 1, Math.floor((capacity / 100) * iconList.length));
+        icon = iconList[idx] || iconList[iconList.length - 1] || icon;
+      } else if (iconList && typeof iconList === 'object') {
+        if (capacity <= (cfg?.states?.critical ?? 15) && iconList.critical) icon = iconList.critical;
+        else if (capacity <= (cfg?.states?.warning ?? 30) && iconList.warning) icon = iconList.warning;
+        else if (capacity >= (cfg?.states?.good ?? 85) && iconList.good) icon = iconList.good;
+        else if (Array.isArray(iconList.default)) icon = iconList.default[2] || iconList.default[0] || icon;
+        else if (iconList.default) icon = iconList.default;
+      }
 
-    if (name === 'hyprland/window') {
-      return `<div id="${cssId}" class="module window">Firefox — GitHub</div>`;
-    }
+      if (charging) icon = '';
+      else if (plugged) icon = '';
 
-    if (name === 'hyprland/language') {
-      return `<div id="${cssId}" class="module language">EN</div>`;
-    }
+      const fmtSource = charging
+        ? (cfg?.['format-charging'] || cfg?.format || '{icon} {capacity}%')
+        : plugged
+          ? (cfg?.['format-plugged'] || cfg?.format || '{icon} {capacity}%')
+          : capacity >= 100
+            ? (cfg?.['format-full'] || cfg?.format || '{icon} {capacity}%')
+            : (cfg?.format || '{icon} {capacity}%');
 
-    if (name === 'hyprland/submap') {
-      return `<div id="${cssId}" class="module submap"></div>`;
-    }
-
-    if (name === 'wlr/taskbar' || name === 'hyprland/taskbar') {
-      return `<div id="${cssId}" class="module taskbar"><button class="taskbar-button">Firefox</button></div>`;
-    }
-
-    if (name === 'mpris' || name === 'mpd') {
-      const fmt = (cfg?.format || '▶ {title}')
-        .replace('{title}', 'Now Playing')
+      const fmt = fmtSource
+        .replace('{icon}', icon)
+        .replace('{capacity}', String(capacity))
+        .replace('{time}', '2:41')
         .replace(/\{[^}]+\}/g, '');
-      return `<div id="${cssId}" class="module mpris">${fmt}</div>`;
+
+      return `<div id="${cssId}" class="module battery">${fmt}</div>`;
     }
 
-    if (name.startsWith('custom/')) {
-      const label = name.replace('custom/', '');
-      const fmt = (cfg?.format || '{}').replace('{}', label.charAt(0).toUpperCase() + label.slice(1));
-      return `<div id="${cssId}" class="module custom-${label}">${fmt}</div>`;
+    if (name === 'pulseaudio' || name === 'wireplumber') {
+      const volume = this.sys.vol;
+      const muted = false;
+      const bluetooth = false;
+      const icons = cfg?.['format-icons'];
+
+      let icon = muted ? '󰖁' : '󰕾';
+      if (Array.isArray(icons)) {
+        const idx = volume <= 33 ? 0 : volume <= 66 ? 1 : 2;
+        icon = icons[Math.min(idx, icons.length - 1)] || icons[icons.length - 1] || icon;
+      } else if (icons && typeof icons === 'object') {
+        if (bluetooth && icons.bluetooth) icon = icons.bluetooth;
+        else if (icons.headphone) icon = icons.headphone;
+        else if (icons.headset) icon = icons.headset;
+        else if (Array.isArray(icons.default)) {
+          const idx = volume <= 33 ? 0 : volume <= 66 ? 1 : 2;
+          icon = icons.default[Math.min(idx, icons.default.length - 1)] || icons.default[icons.default.length - 1] || icon;
+        } else if (icons.default) {
+          icon = icons.default;
+        }
+      }
+
+      const fmtSource = muted
+        ? (cfg?.['format-muted'] || cfg?.format || '{icon} {volume}%')
+        : bluetooth
+          ? (cfg?.['format-bluetooth'] || cfg?.format || '{icon} {volume}%')
+          : (cfg?.format || '{icon} {volume}%');
+
+      const fmt = fmtSource
+        .replace('{icon}', icon)
+        .replace('{volume}', String(volume))
+        .replace('{desc}', 'Speakers')
+        .replace(/\{[^}]+\}/g, '');
+
+      return `<div id="${cssId}" class="module pulseaudio">${fmt}</div>`;
     }
 
-    const label = name.split('/').pop();
-    return `<div id="${cssId}" class="module">${label}</div>`;
+    return `<div id="${cssId}" class="module">${name.split('/').pop()}</div>`;
   }
 
   RenderPreview() {
@@ -734,54 +813,93 @@ class WaybarManager {
     if (!frame) return;
 
     const now = new Date();
-    const bgDataUrl = this.waybarState.wallpaperDataUrl || this.sharedWallpaperDataUrl;
-    const userCss = (this.waybarState.cssContent || '').replace(/<\/style>/gi, '< /style>');
+    const bgDataUrl = this.waybarState.wallpaperDataUrl || this.sharedWallpaperDataUrl || '';
+    const userCss = (this.waybarState.cssContent || '').replace(/<\/style>/gi, '<\\/style>');
 
     let cfg = null;
     try {
       if (this.waybarConfigState.configContent) cfg = this.ParseJsonc(this.waybarConfigState.configContent);
     } catch { }
 
-    const leftModules = cfg?.['modules-left'] || ['hyprland/workspaces'];
+    const leftModules = cfg?.['modules-left'] || ['hyprland/workspaces', 'cpu', 'temperature'];
     const centerModules = cfg?.['modules-center'] || ['clock'];
-    const rightModules = cfg?.['modules-right'] || ['network', 'battery', 'pulseaudio'];
+    const rightModules = cfg?.['modules-right'] || ['tray', 'bluetooth', 'network', 'battery', 'pulseaudio'];
 
     const renderSection = mods => mods.map(m => this.RenderModule(m, cfg?.[m] || {}, now)).join('');
-
-    const wpScript = bgDataUrl
-      ? `<script>document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('__wp_bg');if(el) el.style.backgroundImage='url("' + ${JSON.stringify(bgDataUrl)} + '")';});<\/script>`
-      : '';
+    const wallpaperCss = bgDataUrl
+      ? `background-image:url("${bgDataUrl}");`
+      : `background:linear-gradient(160deg,#0d1117 0%,#161b22 40%,#21262d 100%);`;
 
     frame.srcdoc = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8">
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; img-src 'self' data: file: blob:; font-src 'self' data: file:;">
 <style>
-*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; overflow: hidden; }
-#__wp_bg {
-  position: fixed; inset: 0;
-  background: ${bgDataUrl ? 'transparent' : 'linear-gradient(160deg,#0d1117 0%,#161b22 40%,#21262d 100%)'};
-  background-size: cover; background-position: center;
-  z-index: 0;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow-x:auto;overflow-y:hidden;}
+body{
+  zoom: 0.8;
+  font-family:"JetBrainsMono Nerd Font","JetBrains Mono","Symbols Nerd Font","Noto Sans Symbols 2","Noto Sans Symbols","Font Awesome 6 Free","Material Design Icons Desktop",monospace;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
 }
-#waybar {
-  display: flex; flex-direction: row; align-items: stretch;
-  width: 100%; position: relative; z-index: 1;
+#__wp_bg{
+  position:fixed;
+  inset:0;
+  ${wallpaperCss}
+  background-size:cover;
+  background-position:center;
+  filter:saturate(.95) brightness(.9);
+  z-index:0;
 }
-.modules-left { display: flex; flex: 1; align-items: center; min-width: 0; overflow: hidden; }
-.modules-center { display: flex; align-items: center; justify-content: center; }
-.modules-right { display: flex; flex: 1; align-items: center; justify-content: flex-end; min-width: 0; overflow: hidden; }
-.module { display: flex; align-items: center; }
+#waybar{
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items:center;
+  width:100%;
+  min-height:34px;
+  padding:6px 10px 0;
+  gap:12px;
+}
+.modules-left,.modules-center,.modules-right{
+  display:flex;
+  align-items:center;
+  min-width:0;
+  gap:10px;
+}
+.modules-left{justify-content:flex-start}
+.modules-center{justify-content:center}
+.modules-right{justify-content:flex-end}
+.module{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+}
+.tray{gap:10px}
+.tray-item{display:inline-flex;align-items:center;justify-content:center;opacity:.95}
+.workspaces{gap:8px}
+.workspace-button{
+  appearance:none;
+  border:none;
+  background:transparent;
+  color:inherit;
+}
 ${userCss}
 </style>
-${wpScript}
-</head><body>
+</head>
+<body>
 <div id="__wp_bg"></div>
 <div id="waybar" class="waybar">
   <div class="modules-left">${renderSection(leftModules)}</div>
   <div class="modules-center">${renderSection(centerModules)}</div>
   <div class="modules-right">${renderSection(rightModules)}</div>
 </div>
-</body></html>`;
+</body>
+</html>`;
   }
 
   async initWallpaperSection() {
@@ -1025,7 +1143,6 @@ ${wpScript}
 
 const waybarManager = new WaybarManager();
 
-// too lazy to manually edit app.js
 export function setSharedWallpaperDataUrl(url) {
   return waybarManager.setSharedWallpaperDataUrl(url);
 }
