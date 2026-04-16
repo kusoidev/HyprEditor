@@ -1,39 +1,37 @@
 const LIST_KEYS = new Set([
-  "bind",
-  "binde",
-  "bindm",
-  "bindl",
-  "bindr",
-  "bindc",
-  "bindg",
-  "bindd",
-  "bindk",
-  "unbind",
-  "submap",
-  "exec-once",
-  "exec",
-  "env",
-  "monitor",
-  "workspace",
-  "windowrule",
-  "windowrulev2",
-  "windowrulev3",
-  "layerrule",
-  "source",
-  "animation",
-  "bezier",
-  "permission",
-  "gesture",
-  "device",
-  "touchdevice",
+  "bind", "binde", "bindm", "bindl", "bindr", "bindc", "bindg", "bindd", "bindk",
+  "unbind", "submap", "exec-once", "exec", "env", "monitor", "workspace",
+  "windowrule", "windowrulev2", "windowrulev3", "layerrule", "source",
+  "animation", "bezier", "permission", "gesture", "device", "touchdevice",
   "tablet",
 ]);
+
+function createSectionNode(name = "", path = [], meta = null) {
+  return {
+    _type: "section",
+    name,
+    _path: [...path],
+    _meta: meta,
+    _children: {},
+    _lists: {},
+    _instances: [],
+  };
+}
+
+function createValueNode(kind, key, value, line) {
+  return {
+    _type: kind,
+    key,
+    value,
+    line,
+    lineIdx: line,
+  };
+}
 
 export function parseConfig(text) {
   const parser = new HyprParser(text);
   const ast = parser.parse();
-
-  const root = buildCompatTree(ast);
+  const root = buildTree(ast);
   return {
     ast,
     root,
@@ -41,37 +39,208 @@ export function parseConfig(text) {
   };
 }
 
+function buildTree(ast) {
+  const root = createSectionNode("", []);
+
+  function ingest(nodes, cur) {
+    for (const node of nodes) {
+      if (node.type === "Section") {
+        const name = String(node.name || "").toLowerCase();
+
+        if (!cur._children[name] || cur._children[name]._type !== "section") {
+          cur._children[name] = createSectionNode(name, [...cur._path, name]);
+        }
+
+        const child = cur._children[name];
+        child._instances.push({
+          start: node.startLine,
+          end: node.endLine,
+          line: node.line,
+          key: node.key ?? null,
+        });
+
+        ingest(node.body, child);
+        continue;
+      }
+
+      if (node.type === "Assignment") {
+        cur._children[node.key] = createValueNode(
+          "value",
+          node.key,
+          node.value.raw,
+          node.line
+        );
+        continue;
+      }
+
+      if (node.type === "Variable") {
+        const k = `$${node.name}`.toLowerCase();
+        cur._children[k] = createValueNode(
+          "variable",
+          k,
+          node.value.raw,
+          node.line
+        );
+        continue;
+      }
+
+      if (node.type === "ListEntry") {
+        if (!cur._lists[node.key]) cur._lists[node.key] = [];
+        cur._lists[node.key].push({
+          _type: "list-entry",
+          key: node.key,
+          value: node.value.raw,
+          line: node.line,
+          lineIdx: node.line,
+        });
+      }
+    }
+  }
+
+  ingest(ast.body, root);
+  return root;
+}
+
 export function getValue(root, sectionPath, key) {
   let node = root;
-  for (const seg of sectionPath) {
+  for (const seg of sectionPath.map(s => String(s).toLowerCase())) {
     node = node?._children?.[seg];
-    if (!node) return null;
+    if (!node || node._type !== "section") return null;
   }
-  const child = node._children?.[String(key).toLowerCase()];
-  return child ?? null;
+
+  const child = node?._children?.[String(key).toLowerCase()];
+  if (!child) return null;
+  if (child._type !== "value" && child._type !== "variable") return null;
+  return child;
 }
 
 export function getList(root, sectionPath, key) {
   let node = root;
-  for (const seg of sectionPath) {
+  for (const seg of sectionPath.map(s => String(s).toLowerCase())) {
     node = node?._children?.[seg];
-    if (!node) return [];
+    if (!node || node._type !== "section") return [];
   }
-  return node._lists?.[String(key).toLowerCase()] || [];
+  return node?._lists?.[String(key).toLowerCase()] || [];
 }
 
-export function applyChange(rawLines, lineIdx, newValue) {
-  const line = rawLines[lineIdx];
-  if (typeof line !== "string") return false;
+export function getDuplicateSections(root, path = []) {
+  if (!root || root._type !== "section") return [];
 
-  const { code, comment } = splitComment(line);
-  const eqIdx = findTopLevelEquals(code);
-  if (eqIdx === -1) return false;
+  let duplicates = [];
 
-  const prefix = code.slice(0, eqIdx + 1);
-  const rebuilt = `${prefix} ${newValue}`.replace(/\s+$/, "");
-  rawLines[lineIdx] = comment != null ? `${rebuilt} # ${comment}` : rebuilt;
-  return true;
+  for (const [name, node] of Object.entries(root._children || {})) {
+    if (!node || node._type !== "section") continue;
+
+    if (node._instances.length > 1) {
+      duplicates.push({
+        name,
+        path: [...path, name],
+        count: node._instances.length,
+        instances: node._instances.slice(),
+      });
+    }
+
+    duplicates = duplicates.concat(getDuplicateSections(node, [...path, name]));
+  }
+
+  return duplicates;
+}
+
+export function mergeDuplicateSections(config) {
+  const duplicates = getDuplicateSections(config.root);
+  if (!duplicates.length) return config.rawLines.slice();
+
+  const lines = config.rawLines.slice();
+
+  const edits = [];
+
+  for (const dup of duplicates) {
+    const [first, ...rest] = dup.instances;
+    if (!first || !rest.length) continue;
+
+    for (const inst of rest) {
+      edits.push({
+        type: "insert",
+        at: first.end,
+        lines: lines.slice(inst.start + 1, inst.end),
+        depth: dup.path.length,
+      });
+
+      edits.push({
+        type: "remove",
+        start: inst.start,
+        count: inst.end - inst.start + 1,
+        depth: dup.path.length,
+      });
+    }
+  }
+
+  edits.sort((a, b) => {
+    const aPos = a.type === "remove" ? a.start : a.at;
+    const bPos = b.type === "remove" ? b.start : b.at;
+    return bPos - aPos;
+  });
+
+  for (const edit of edits) {
+    if (edit.type === "remove") {
+      lines.splice(edit.start, edit.count);
+    } else {
+      lines.splice(edit.at, 0, ...edit.lines);
+    }
+  }
+
+  return lines;
+}
+
+export function applyChange(config, sectionPath, key, value) {
+  const { root, rawLines } = config;
+  const normalizedPath = sectionPath.map(s => String(s).toLowerCase());
+  const normalizedKey = String(key).toLowerCase();
+  const isList = LIST_KEYS.has(normalizedKey);
+
+  let node = root;
+  for (const seg of normalizedPath) {
+    node = node?._children?.[seg];
+    if (!node || node._type !== "section") break;
+  }
+
+  if (!isList) {
+    const existing = node?._children?.[normalizedKey];
+    if (existing && (existing._type === "value" || existing._type === "variable") && existing.lineIdx !== undefined) {
+      rawLines[existing.lineIdx] = replaceAssignmentValue(rawLines[existing.lineIdx], value);
+      return;
+    }
+  }
+
+  if (node && node._type === "section" && node._instances.length) {
+    const lastInst = node._instances[node._instances.length - 1];
+    const indent = "    ".repeat(normalizedPath.length);
+    rawLines.splice(lastInst.end, 0, `${indent}${key} = ${value}`);
+    return;
+  }
+
+  const indentBase = normalizedPath.map((seg, i) => `${"    ".repeat(i)}${seg} {`);
+  const closing = normalizedPath
+    .slice()
+    .reverse()
+    .map((_, i) => `${"    ".repeat(normalizedPath.length - 1 - i)}}`);
+  const leafIndent = "    ".repeat(normalizedPath.length);
+
+  rawLines.push(
+    "",
+    ...indentBase,
+    `${leafIndent}${key} = ${value}`,
+    ...closing
+  );
+}
+
+function replaceAssignmentValue(line, value) {
+  const idx = findTopLevelEquals(line);
+  if (idx === -1) return line;
+  const left = line.slice(0, idx + 1);
+  const commentSplit = splitComment(line.slice(idx + 1));
+  const trailingComment = commentSplit.comment != null ? ` # ${commentSplit.comment}` : "";
+  return `${left} ${value}${trailingComment}`;
 }
 
 export function serializeConfig(rawLines) {
@@ -79,23 +248,41 @@ export function serializeConfig(rawLines) {
 }
 
 export function getAllSources(root) {
-  return (root._lists?.["source"] || []).map((e) => e.value);
+  return (root?._lists?.["source"] || []).map(e => e.value);
 }
 
 export function findAllMatches(root, query) {
-  const q = String(query).toLowerCase();
+  const q = String(query || "").toLowerCase();
   const matches = [];
 
   function walk(node, path) {
+    if (!node || node._type !== "section") return;
+
     for (const [k, child] of Object.entries(node._children || {})) {
-      if (child._type === "value") {
-        if (k.includes(q) || String(child.value).toLowerCase().includes(q)) {
-          matches.push({ path, key: k, value: child.value, line: child.line });
+      if (child._type === "value" || child._type === "variable") {
+        if (
+          k.includes(q) ||
+          String(child.value ?? "").toLowerCase().includes(q)
+        ) {
+          matches.push({
+            path,
+            key: k,
+            value: child.value,
+            line: child.line,
+          });
         }
-      } else if (child._type === "section") {
+        continue;
+      }
+
+      if (child._type === "section") {
         const label = [...path, k].join(".");
         if (label.includes(q)) {
-          matches.push({ path, key: k, value: "[section]", line: -1 });
+          matches.push({
+            path,
+            key: k,
+            value: "[section]",
+            line: child._instances[0]?.line ?? -1,
+          });
         }
         walk(child, [...path, k]);
       }
@@ -103,8 +290,16 @@ export function findAllMatches(root, query) {
 
     for (const [k, entries] of Object.entries(node._lists || {})) {
       for (const e of entries) {
-        if (k.includes(q) || String(e.value).toLowerCase().includes(q)) {
-          matches.push({ path, key: k, value: e.value, line: e.line });
+        if (
+          k.includes(q) ||
+          String(e.value ?? "").toLowerCase().includes(q)
+        ) {
+          matches.push({
+            path,
+            key: k,
+            value: e.value,
+            line: e.line,
+          });
         }
       }
     }
@@ -116,7 +311,7 @@ export function findAllMatches(root, query) {
 
 class HyprParser {
   constructor(text) {
-    this.text = String(text).replace(/\r\n/g, "\n");
+    this.text = String(text ?? "").replace(/\r\n/g, "\n");
     this.lines = this.text.split("\n");
     this.index = 0;
   }
@@ -152,8 +347,10 @@ class HyprParser {
           name: stmt.name,
           key: stmt.key ?? null,
           body,
-          loc: loc(lineNo, 0, lineNo, raw.length),
           line: lineNo,
+          startLine: lineNo,
+          endLine: this.index - 1,
+          loc: loc(lineNo, 0, this.index - 1, this.lines[this.index - 1]?.length ?? 0),
           inlineComment: stmt.inlineComment ?? null,
         });
         continue;
@@ -265,61 +462,6 @@ class HyprParser {
 
   error(line, col, msg) {
     return new SyntaxError(`${msg} at ${line + 1}:${col + 1}`);
-  }
-}
-
-function buildCompatTree(ast) {
-  const root = { _type: "section", _children: {}, _lists: {}, _path: [] };
-  ingestNodes(root, ast.body);
-  return root;
-}
-
-function ingestNodes(cur, nodes) {
-  for (const node of nodes) {
-    if (node.type === "Section") {
-      const name = node.name.toLowerCase();
-      if (!cur._children[name]) {
-        cur._children[name] = {
-          _type: "section",
-          _children: {},
-          _lists: {},
-          _path: [...cur._path, name],
-          _node: node,
-        };
-      }
-      ingestNodes(cur._children[name], node.body);
-      continue;
-    }
-
-    if (node.type === "Assignment") {
-      cur._children[node.key] = {
-        _type: "value",
-        value: node.value.raw,
-        line: node.line,
-        _node: node,
-      };
-      continue;
-    }
-
-    if (node.type === "Variable") {
-      const k = `$${node.name}`;
-      cur._children[k.toLowerCase()] = {
-        _type: "value",
-        value: node.value.raw,
-        line: node.line,
-        _node: node,
-      };
-      continue;
-    }
-
-    if (node.type === "ListEntry") {
-      if (!cur._lists[node.key]) cur._lists[node.key] = [];
-      cur._lists[node.key].push({
-        value: node.value.raw,
-        line: node.line,
-        _node: node,
-      });
-    }
   }
 }
 

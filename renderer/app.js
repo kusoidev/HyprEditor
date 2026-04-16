@@ -1,4 +1,14 @@
-import { parseConfig, getValue, getList, applyChange, serializeConfig, getAllSources, findAllMatches } from './parser.js';
+import {
+  parseConfig,
+  getValue,
+  getList,
+  applyChange,
+  serializeConfig,
+  getAllSources,
+  findAllMatches,
+  getDuplicateSections,
+  mergeDuplicateSections,
+} from './parser.js';
 import { initWaybarSection, renderWaybarSection, initWaybarConfigSection, renderWaybarConfigSection, initWallpaperSection, renderWallpaperSection } from './waybar.js';
 import { SECTIONS } from './schema.js';
 
@@ -51,38 +61,72 @@ async function loadConfig(filePath) {
     return;
   }
 
-  const { root: tempRoot } = parseConfig(res.content);
-  const sources = getAllSources(tempRoot);
-
-  let includedFiles = [];
-  if (sources.length) {
-    includedFiles = await window.hypr.getIncludedFiles(filePath, sources);
+  let config;
+  try {
+    config = parseConfig(res.content);
+  } catch (err) {
+    showNotification(`Parse error: ${err.message}`, 'error');
+    return;
   }
-  state.includedFiles = includedFiles;
-  const mainLines = res.content.split('\n');
-  const segments = [{ filePath, startLine: 0, lineCount: mainLines.length }];
-  let allLines = [...mainLines];
-
-  for (const inc of includedFiles) {
-    const incLines = inc.content.split('\n');
-    segments.push({ filePath: inc.path, startLine: allLines.length, lineCount: incLines.length });
-    allLines = allLines.concat(incLines);
-  }
-
-  const { root, rawLines } = parseConfig(allLines.join('\n'));
 
   state.configPath = filePath;
-  state.rawLines = rawLines;
-  state.root = root;
-  state.fileSegments = segments;
+  state.rawLines = config.rawLines.slice();
+  state.root = config.root;
+
+  if (!Array.isArray(state.fileSegments) || state.fileSegments.length === 0) {
+    state.fileSegments = [{
+      filePath,
+      startLine: 0,
+      lineCount: state.rawLines.length,
+    }];
+  } else {
+    state.fileSegments = [{
+      filePath,
+      startLine: 0,
+      lineCount: state.rawLines.length,
+    }];
+  }
+
   state.dirty = false;
+  updateSaveButton?.();
 
-  updatePathDisplay();
-  updateSaveButton();
+  const duplicates = getDuplicateSections(state.root);
+
+  if (duplicates.length > 0) {
+    const names = duplicates.map(d => d.path.join('.')).join(', ');
+    const confirmed = confirm(
+      `I detected repeated sections (${names}). Merge them automatically?`
+    );
+
+    if (confirmed) {
+      const mergedLines = mergeDuplicateSections(config);
+      const mergedText = mergedLines.join('\n');
+
+      let reparsed;
+      try {
+        reparsed = parseConfig(mergedText);
+      } catch (err) {
+        showNotification(`Merged config became invalid: ${err.message}`, 'error');
+        return;
+      }
+
+      state.rawLines = reparsed.rawLines.slice();
+      state.root = reparsed.root;
+      state.fileSegments = [{
+        filePath,
+        startLine: 0,
+        lineCount: state.rawLines.length,
+      }];
+      state.dirty = true;
+      updateSaveButton?.();
+
+      await saveConfig();
+      return;
+    }
+  }
+
+  //renderSidebar();
   renderActiveSection();
-
-  const extra = includedFiles.length ? ` (+${includedFiles.length} included files)` : '';
-  showNotification(`Loaded: ${filePath.split('/').pop()}${extra}`, 'success');
 }
 
 async function restoreBackups() {
@@ -123,27 +167,53 @@ async function restoreBackups() {
 async function saveConfig() {
   if (!state.configPath || !state.dirty) return;
 
-  const segments = state.fileSegments;
+  const segments = Array.isArray(state.fileSegments) ? state.fileSegments : [];
+
+  if (segments.length === 0) {
+    const res = await window.hypr.writeFile(state.configPath, state.rawLines.join('\n'));
+    if (!res.ok) {
+      showNotification(`Save failed: ${res.error}`, 'error');
+      return;
+    }
+
+    state.fileSegments = [{
+      filePath: state.configPath,
+      startLine: 0,
+      lineCount: state.rawLines.length,
+    }];
+
+    state.dirty = false;
+    updateSaveButton();
+    showNotification('Saved 1 file! (backup created as .hypreditor.bak)', 'success');
+    return;
+  }
 
   const lastSeg = segments[segments.length - 1];
   const segEnd = lastSeg ? lastSeg.startLine + lastSeg.lineCount : 0;
   const overflow = state.rawLines.slice(segEnd);
 
+  let savedCount = 0;
+
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     let fileLines = state.rawLines.slice(seg.startLine, seg.startLine + seg.lineCount);
-    if (i === 0 && overflow.length > 0) fileLines = fileLines.concat(overflow);
+
+    if (i === 0 && overflow.length > 0) {
+      fileLines = fileLines.concat(overflow);
+    }
+
     const res = await window.hypr.writeFile(seg.filePath, fileLines.join('\n'));
     if (!res.ok) {
       showNotification(`Save failed (${seg.filePath.split('/').pop()}): ${res.error}`, 'error');
       return;
     }
+
+    savedCount++;
   }
 
   state.dirty = false;
   updateSaveButton();
-  const n = segments.length;
-  showNotification(`Saved ${n} file${n > 1 ? 's' : ''}! (backups created as .hypreditor.bak)`, 'success');
+  showNotification(`Saved ${savedCount} file${savedCount !== 1 ? 's' : ''}! (backups created as .hypreditor.bak)`, 'success');
 }
 
 function isRiskySetting(setting, nextValue) {
@@ -707,7 +777,8 @@ function renderSubsection(sub) {
     for (const setting of sub.settings) {
       const node = getValueFromPath(sub.sectionPath, setting.key);
       const currentValue = node ? node.value : '';
-      html += renderControl(setting, currentValue, sub.sectionPath, node?.line);
+      const lineRef = node?.lineIdx ?? node?.line ?? null;
+      html += renderControl(setting, currentValue, sub.sectionPath, lineRef);
     }
     html += `</div>`;
   }
@@ -725,22 +796,33 @@ function renderSubsection(sub) {
 
 function getValueFromPath(sectionPath, key) {
   if (!state.root) return null;
+
   let node = state.root;
-  for (const seg of sectionPath) {
-    node = node._children[seg];
-    if (!node) return null;
+  for (const seg of (sectionPath || []).map(s => String(s).toLowerCase())) {
+    node = node?._children?.[seg];
+    if (!node || node._type !== 'section') return null;
   }
-  return node._children[key] || null;
+
+  const child = node?._children?.[String(key).toLowerCase()];
+  if (!child) return null;
+
+  if (child._type === 'value' || child._type === 'variable') {
+    return child;
+  }
+
+  return null;
 }
 
 function getListFromPath(sectionPath, key) {
   if (!state.root) return [];
+
   let node = state.root;
-  for (const seg of sectionPath) {
-    node = node._children[seg];
-    if (!node) return [];
+  for (const seg of (sectionPath || []).map(s => String(s).toLowerCase())) {
+    node = node?._children?.[seg];
+    if (!node || node._type !== 'section') return [];
   }
-  return node._lists[key] || [];
+
+  return node?._lists?.[String(key).toLowerCase()] || [];
 }
 
 function renderControl(setting, value, sectionPath, lineIdx) {
@@ -1013,11 +1095,7 @@ function attachControlListeners(container, sub) {
 }
 
 async function onControlChange(input) {
-  const lineIdx = parseInt(input.dataset.line, 10);
   const type = input.dataset.type;
-
-  if (lineIdx === -1 || lineIdx === undefined || Number.isNaN(lineIdx)) return;
-
   const key = input.dataset.key;
   const sectionPath = JSON.parse(input.dataset.path || '[]');
   const sub = state.activeSubsection;
@@ -1026,7 +1104,7 @@ async function onControlChange(input) {
   let newValue;
   switch (type) {
     case 'bool':
-      newValue = input.checked ? true : false;
+      newValue = input.checked ? 'true' : 'false';
       break;
     case 'color':
       newValue = hexToHyprColor(input.value, input.dataset.original);
@@ -1053,15 +1131,34 @@ async function onControlChange(input) {
     }
   }
 
-  applyChange(state.rawLines, lineIdx, newValue);
+  applyChange(
+    { root: state.root, rawLines: state.rawLines },
+    sectionPath,
+    key,
+    newValue
+  );
+
+  const reparsed = parseConfig(state.rawLines.join('\n'));
+  state.root = reparsed.root;
+  state.rawLines = reparsed.rawLines;
+
   state.dirty = true;
   updateSaveButton();
+  renderActiveSection();
 }
 
 function onListEntryChange(input) {
-  const line = parseInt(input.dataset.line);
-  if (isNaN(line) || line < 0) return;
-  applyChange(state.rawLines, line, input.value);
+  const line = parseInt(input.dataset.line, 10);
+  const listKey = input.dataset.listkey;
+
+  if (Number.isNaN(line) || line < 0) return;
+
+  state.rawLines[line] = `${listKey} = ${input.value}`;
+
+  const reparsed = parseConfig(state.rawLines.join('\n'));
+  state.root = reparsed.root;
+  state.rawLines = reparsed.rawLines;
+
   state.dirty = true;
   updateSaveButton();
 }
@@ -1074,16 +1171,25 @@ function autoSetSetting(key, sectionPath, defaultVal, type) {
 
   let insertIdx = null;
   let node = state.root;
-  for (const seg of sectionPath) {
-    node = node?.children?.[seg];
+
+  for (const seg of (sectionPath || []).map(s => String(s).toLowerCase())) {
+    node = node?._children?.[seg];
   }
 
-  if (node) {
-    const allLines = Object.values(node.children ?? {})
-      .map(n => n.line)
-      .filter(l => l !== undefined && l >= 0);
-    if (allLines.length) {
-      insertIdx = Math.max(...allLines) + 1;
+  if (node && node._type === 'section') {
+    const allLines = Object.values(node._children ?? {})
+      .filter(n => n && (n._type === 'value' || n._type === 'variable'))
+      .map(n => n.lineIdx ?? n.line)
+      .filter(l => l !== undefined && l !== null && l >= 0);
+
+    const listLines = Object.values(node._lists ?? {})
+      .flat()
+      .map(n => n.lineIdx ?? n.line)
+      .filter(l => l !== undefined && l !== null && l >= 0);
+
+    const merged = [...allLines, ...listLines];
+    if (merged.length) {
+      insertIdx = Math.max(...merged) + 1;
     }
   }
 
