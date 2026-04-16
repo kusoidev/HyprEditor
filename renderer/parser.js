@@ -367,6 +367,73 @@ export function findAllMatches(root, query) {
   return matches;
 }
 
+export function removeDuplicateKeys(config) {
+  const lines = config.rawLines.slice();
+  const removals = new Set();
+
+  function visitBlock(nodes) {
+    const seen = new Map();
+
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const node = nodes[i];
+      if (!node) continue;
+
+      if (node.type === 'Section') {
+        visitBlock(node.body);
+        continue;
+      }
+
+      if (node.type !== 'Assignment' && node.type !== 'Variable') {
+        continue;
+      }
+
+      const key =
+        node.type === 'Variable'
+          ? `$${String(node.name).toLowerCase()}`
+          : String(node.key).toLowerCase();
+
+      if (seen.has(key)) {
+        removals.add(node.line);
+      } else {
+        seen.set(key, node.line);
+      }
+    }
+  }
+
+  visitBlock(config.ast.body);
+
+  [...removals]
+    .filter(line => Number.isInteger(line) && line >= 0 && line < lines.length)
+    .sort((a, b) => b - a)
+    .forEach(line => lines.splice(line, 1));
+
+  return lines;
+}
+
+// for the hyprland config
+export function normalizeConfig(config) {
+  let parsed = config;
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    const mergedSections = mergeDuplicateSections(parsed);
+    if (mergedSections.join('\n') !== parsed.rawLines.join('\n')) {
+      parsed = parseConfig(mergedSections.join('\n'));
+      changed = true;
+    }
+
+    const dedupedKeys = removeDuplicateKeys(parsed);
+    if (dedupedKeys.join('\n') !== parsed.rawLines.join('\n')) {
+      parsed = parseConfig(dedupedKeys.join('\n'));
+      changed = true;
+    }
+  }
+
+  return parsed;
+}
+
 class HyprParser {
   constructor(text) {
     this.text = String(text ?? "").replace(/\r\n/g, "\n");

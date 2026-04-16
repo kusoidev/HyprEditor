@@ -8,6 +8,8 @@ import {
   findAllMatches,
   getDuplicateSections,
   mergeDuplicateSections,
+  removeDuplicateKeys,
+  normalizeConfig,
 } from './parser.js';
 import { initWaybarSection, renderWaybarSection, initWaybarConfigSection, renderWaybarConfigSection, initWallpaperSection, renderWallpaperSection } from './waybar.js';
 import { SECTIONS } from './schema.js';
@@ -69,59 +71,23 @@ async function loadConfig(filePath) {
     return;
   }
 
+  const normalized = normalizeConfig(config);
+  const changed = normalized.rawLines.join('\n') !== config.rawLines.join('\n');
+
   state.configPath = filePath;
-  state.rawLines = config.rawLines.slice();
-  state.root = config.root;
-
-  if (!Array.isArray(state.fileSegments) || state.fileSegments.length === 0) {
-    state.fileSegments = [{
-      filePath,
-      startLine: 0,
-      lineCount: state.rawLines.length,
-    }];
-  } else {
-    state.fileSegments = [{
-      filePath,
-      startLine: 0,
-      lineCount: state.rawLines.length,
-    }];
-  }
-
-  state.dirty = false;
+  state.rawLines = normalized.rawLines.slice();
+  state.root = normalized.root;
+  state.dirty = changed;
   updateSaveButton?.();
 
-  const duplicates = getDuplicateSections(state.root);
-
-  if (duplicates.length > 0) {
-    const names = duplicates.map(d => d.path.join('.')).join(', ');
-    const confirmed = confirm(
-      `I detected repeated sections (${names}). Merge them automatically?`
+  if (changed) {
+    const ok = confirm(
+      'I found duplicate sections or repeated keys in this config. Clean them automatically and keep the final effective values?'
     );
 
-    if (confirmed) {
-      const mergedLines = mergeDuplicateSections(config);
-      const mergedText = mergedLines.join('\n');
-
-      let reparsed;
-      try {
-        reparsed = parseConfig(mergedText);
-      } catch (err) {
-        showNotification(`Merged config became invalid: ${err.message}`, 'error');
-        return;
-      }
-
-      state.rawLines = reparsed.rawLines.slice();
-      state.root = reparsed.root;
-      state.fileSegments = [{
-        filePath,
-        startLine: 0,
-        lineCount: state.rawLines.length,
-      }];
-      state.dirty = true;
-      updateSaveButton?.();
-
+    if (ok) {
       await saveConfig();
-      return;
+      return await loadConfig(filePath);
     }
   }
 
@@ -1138,10 +1104,11 @@ async function onControlChange(input) {
     newValue
   );
 
-  const reparsed = parseConfig(state.rawLines.join('\n'));
+  let reparsed = parseConfig(state.rawLines.join('\n'));
+  reparsed = normalizeConfig(reparsed);
+
   state.root = reparsed.root;
   state.rawLines = reparsed.rawLines;
-
   state.dirty = true;
   updateSaveButton();
   renderActiveSection();
