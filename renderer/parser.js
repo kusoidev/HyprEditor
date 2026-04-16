@@ -192,45 +192,103 @@ export function mergeDuplicateSections(config) {
   return lines;
 }
 
-export function applyChange(config, sectionPath, key, value) {
-  const { root, rawLines } = config;
-  const normalizedPath = sectionPath.map(s => String(s).toLowerCase());
-  const normalizedKey = String(key).toLowerCase();
+export function applyChange(arg1, arg2, arg3, arg4) {
+  if (Array.isArray(arg1) && typeof arg2 === 'number') {
+    const rawLines = arg1;
+    const lineIdx = arg2;
+    const value = arg3;
+
+    if (lineIdx < 0 || lineIdx >= rawLines.length) return;
+    rawLines[lineIdx] = replaceAssignmentValue(rawLines[lineIdx], value);
+    return;
+  }
+
+  const config = arg1;
+  const sectionPath = Array.isArray(arg2) ? arg2.map(s => String(s).toLowerCase()) : [];
+  const key = String(arg3);
+  const value = arg4;
+
+  const { root, rawLines } = config || {};
+  if (!root || !rawLines) return;
+
+  const normalizedKey = key.toLowerCase();
   const isList = LIST_KEYS.has(normalizedKey);
 
   let node = root;
-  for (const seg of normalizedPath) {
-    node = node?._children?.[seg];
-    if (!node || node._type !== "section") break;
+  let deepestExistingNode = root;
+  let deepestExistingDepth = 0;
+
+  for (let i = 0; i < sectionPath.length; i++) {
+    const seg = sectionPath[i];
+    const next = node?._children?.[seg];
+    if (next && next._type === 'section') {
+      node = next;
+      deepestExistingNode = next;
+      deepestExistingDepth = i + 1;
+    } else {
+      node = null;
+      break;
+    }
   }
 
-  if (!isList) {
-    const existing = node?._children?.[normalizedKey];
-    if (existing && (existing._type === "value" || existing._type === "variable") && existing.lineIdx !== undefined) {
-      rawLines[existing.lineIdx] = replaceAssignmentValue(rawLines[existing.lineIdx], value);
+  if (node && node._type === 'section') {
+    if (!isList) {
+      const existing = node._children?.[normalizedKey];
+      if (
+        existing &&
+        (existing._type === 'value' || existing._type === 'variable') &&
+        existing.lineIdx !== undefined
+      ) {
+        rawLines[existing.lineIdx] = replaceAssignmentValue(rawLines[existing.lineIdx], value);
+        return;
+      }
+    }
+
+    if (node._instances?.length) {
+      const lastInst = node._instances[node._instances.length - 1];
+      const indent = '    '.repeat(sectionPath.length);
+      rawLines.splice(lastInst.end, 0, `${indent}${key} = ${value}`);
       return;
     }
   }
 
-  if (node && node._type === "section" && node._instances.length) {
-    const lastInst = node._instances[node._instances.length - 1];
-    const indent = "    ".repeat(normalizedPath.length);
-    rawLines.splice(lastInst.end, 0, `${indent}${key} = ${value}`);
+  if (deepestExistingNode && deepestExistingNode._type === 'section' && deepestExistingNode._instances?.length) {
+    const missingSegments = sectionPath.slice(deepestExistingDepth);
+    const baseIndent = '    '.repeat(deepestExistingDepth);
+    const insertAt = deepestExistingNode._instances[deepestExistingNode._instances.length - 1].end;
+
+    const linesToInsert = [];
+
+    for (let i = 0; i < missingSegments.length; i++) {
+      linesToInsert.push(`${'    '.repeat(deepestExistingDepth + i)}${missingSegments[i]} {`);
+    }
+
+    linesToInsert.push(`${'    '.repeat(sectionPath.length)}${key} = ${value}`);
+
+    for (let i = missingSegments.length - 1; i >= 0; i--) {
+      linesToInsert.push(`${'    '.repeat(deepestExistingDepth + i)}}`);
+    }
+
+    if (missingSegments.length === 0) {
+      linesToInsert.length = 0;
+      linesToInsert.push(`${baseIndent}${key} = ${value}`);
+    }
+
+    rawLines.splice(insertAt, 0, ...linesToInsert);
     return;
   }
 
-  const indentBase = normalizedPath.map((seg, i) => `${"    ".repeat(i)}${seg} {`);
-  const closing = normalizedPath
-    .slice()
+  const openLines = sectionPath.map((seg, i) => `${'    '.repeat(i)}${seg} {`);
+  const closeLines = [...sectionPath]
     .reverse()
-    .map((_, i) => `${"    ".repeat(normalizedPath.length - 1 - i)}}`);
-  const leafIndent = "    ".repeat(normalizedPath.length);
+    .map((_, i) => `${'    '.repeat(sectionPath.length - 1 - i)}}`);
+  const leafIndent = '    '.repeat(sectionPath.length);
 
   rawLines.push(
-    "",
-    ...indentBase,
+    '',
+    ...openLines,
     `${leafIndent}${key} = ${value}`,
-    ...closing
+    ...closeLines
   );
 }
 
