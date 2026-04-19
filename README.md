@@ -36,6 +36,8 @@ HyprEditor currently includes editable sections for:
 - Misc / Behavior: Misc, Cursor, Render, OpenGL, Ecosystem, Experimental, Debug. 
 - Rules: Window rules and layer rules. 
 - Keybindings: bind settings and multiple bind entry types. 
+- Wallpaper: apply wallpaper for your current homescreen. 
+- Waybar: edit your waybar's config or css.
 - Startup / Permissions / Includes: `exec`, `exec-once`, permission rules, and `source` directives. 
 
 ## Install
