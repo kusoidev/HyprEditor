@@ -18,7 +18,7 @@ await esbuild.build({
   outfile: join(distDir, "main.js"),
 });
 
-const rendererEntries = ["app", "parser", "waybar", "schema"];
+const rendererEntries = ["app", "parser", "waybar", "schema", "system"];
 for (const file of rendererEntries) {
   await esbuild.build({
     entryPoints: [`renderer/${file}.ts`],

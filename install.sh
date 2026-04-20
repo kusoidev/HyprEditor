@@ -67,6 +67,7 @@ need_file "$SCRIPT_DIR/renderer/style.css"
 need_file "$SCRIPT_DIR/renderer/app.ts"
 need_file "$SCRIPT_DIR/renderer/parser.ts"
 need_file "$SCRIPT_DIR/renderer/schema.ts"
+need_file "$SCRIPT_DIR/renderer/system.ts"
 need_file "$SCRIPT_DIR/renderer/waybar.ts"
 need_file "$SCRIPT_DIR/renderer/types.ts"
 
@@ -108,6 +109,7 @@ cp "$SCRIPT_DIR/dist/renderer/app.js"     "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/dist/renderer/waybar.js"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/dist/renderer/parser.js"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/dist/renderer/schema.js"  "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/dist/renderer/system.js"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/package.json"             "$INSTALL_DIR/"
 [[ -f "$SCRIPT_DIR/package-lock.json" ]] && cp "$SCRIPT_DIR/package-lock.json" "$INSTALL_DIR/" || true
 

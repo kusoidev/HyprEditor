@@ -3,13 +3,13 @@ import {
   applyChange,
   findAllMatches,
   normalizeConfig,
+  getAllSources,
   type ParsedConfig,
   type SectionTreeNode,
   type ValueTreeNode,
   type ListEntryTreeNode,
   type SearchMatch,
 } from "./parser.js";
-
 import {
   initWaybarSection,
   renderWaybarSection,
@@ -18,7 +18,11 @@ import {
   initWallpaperSection,
   renderWallpaperSection,
 } from "./waybar.js";
-
+import {
+  initSystemSection,
+  renderBluetoothSection,
+  renderWifiSection,
+} from "./system.js";
 import { SECTIONS } from "./schema.js";
 
 interface SchemaSetting {
@@ -134,6 +138,7 @@ class HyprEditor {
       await initWaybarSection();
       await initWaybarConfigSection();
       await initWallpaperSection();
+      await initSystemSection();
     } else {
       this.ShowWelcome();
     }
@@ -150,29 +155,49 @@ class HyprEditor {
       return;
     }
 
-    let config: ParsedConfig;
+    let mainParsed: ParsedConfig;
     try {
-      config = parseConfig(res.content);
+      mainParsed = parseConfig(res.content);
     } catch (err) {
       this.ShowNotification(`Parse error: ${(err as Error).message}`, "error");
       return;
     }
 
-    const normalized = normalizeConfig(config);
-    const changed = normalized.rawLines.join("\n") !== config.rawLines.join("\n");
+    const sources = getAllSources(mainParsed.root);
+    const includedFiles = sources.length > 0
+      ? await window.hypr.getIncludedFiles(filePath, sources).catch(() => [])
+      : [];
+
+    const segments: FileSegment[] = [{ filePath, startLine: 0, lineCount: mainParsed.rawLines.length }];
+    let allLines: string[] = [...mainParsed.rawLines];
+
+    for (const inc of includedFiles) {
+      const incStart = allLines.length;
+      try {
+        const incParsed = parseConfig(inc.content);
+        segments.push({ filePath: inc.path, startLine: incStart, lineCount: incParsed.rawLines.length });
+        allLines = allLines.concat(incParsed.rawLines);
+      } catch { }
+    }
+
+    let combined: ParsedConfig;
+    try {
+      combined = parseConfig(allLines.join("\n"));
+    } catch (err) {
+      this.ShowNotification(`Combined parse error: ${(err as Error).message}`, "error");
+      return;
+    }
 
     this.state.configPath = filePath;
-    this.state.rawLines = normalized.rawLines.slice();
-    this.state.root = normalized.root;
-    this.state.dirty = changed;
+    this.state.rawLines = allLines;
+    this.state.root = combined.root;
+    this.state.fileSegments = segments;
+    this.state.dirty = false;
     this.UpdateSaveButton();
+    this.UpdatePathDisplay();
 
-    if (changed) {
-      const ok = confirm("I found duplicate sections or repeated keys in this config. Clean them automatically and keep the final effective values?");
-      if (ok) {
-        await this.SaveConfig();
-        return this.LoadConfig(filePath);
-      }
+    if (includedFiles.length > 0) {
+      this.ShowNotification(`Loaded ${segments.length} config file${segments.length > 1 ? "s" : ""} (${includedFiles.length} sourced)`, "info");
     }
 
     this.RenderActiveSection();
@@ -463,7 +488,7 @@ class HyprEditor {
     sidebar.innerHTML = html;
 
     sidebar.addEventListener("click", e => {
-      const btn = (e.target as Element).closest < HTMLButtonElement > (".nav-item");
+      const btn = (e.target as Element).closest<HTMLButtonElement>(".nav-item");
       if (!btn) return;
       const sec = (SECTIONS as SchemaSection[]).find(s => s.id === btn.dataset.section);
       if (sec) this.ActivateSection(sec, sec.subsections[0]);
@@ -480,7 +505,7 @@ class HyprEditor {
     this.state.searchQuery = "";
 
     this.$$(".nav-item").forEach(b => b.classList.remove("active"));
-    const btn = document.querySelector < HTMLButtonElement > (`[data-section="${section.id}"]`);
+    const btn = document.querySelector<HTMLButtonElement>(`[data-section="${section.id}"]`);
     if (btn) btn.classList.add("active");
 
     this.RenderActiveSection();
@@ -545,7 +570,7 @@ class HyprEditor {
 
     main.innerHTML = html;
 
-    main.querySelectorAll < HTMLButtonElement > (".sub-tab").forEach(tab => {
+    main.querySelectorAll<HTMLButtonElement>(".sub-tab").forEach(tab => {
       tab.addEventListener("click", () => {
         const found = sec.subsections.find(s => s.id === tab.dataset.sub);
         if (found) { this.state.activeSubsection = found; this.RenderActiveSection(); }
@@ -567,6 +592,18 @@ class HyprEditor {
     if (sub?.type === "wallpaper-browser") {
       const container = document.getElementById("special-section-content");
       if (container) renderWallpaperSection(container);
+      return;
+    }
+
+    if (sub?.type === "bluetooth") {
+      const container = document.getElementById("special-section-content");
+      if (container) renderBluetoothSection(container);
+      return;
+    }
+
+    if (sub?.type === "wifi") {
+      const container = document.getElementById("special-section-content");
+      if (container) renderWifiSection(container);
       return;
     }
 
@@ -713,7 +750,7 @@ class HyprEditor {
   }
 
   private AttachControlListeners(container: HTMLElement, sub: SchemaSubsection): void {
-    const openBtn = container.querySelector < HTMLButtonElement > ("#open-config-btn");
+    const openBtn = container.querySelector<HTMLButtonElement>("#open-config-btn");
     if (openBtn) {
       openBtn.addEventListener("click", async () => {
         const p = await window.hypr.pickFile();
@@ -721,7 +758,7 @@ class HyprEditor {
       });
     }
 
-    container.querySelectorAll < HTMLInputElement > (".slider").forEach(input => {
+    container.querySelectorAll<HTMLInputElement>(".slider").forEach(input => {
       const valSpan = document.getElementById(input.id + "-val");
       input.addEventListener("input", () => {
         if (valSpan) valSpan.textContent = input.value;
@@ -729,15 +766,15 @@ class HyprEditor {
       });
     });
 
-    container.querySelectorAll < HTMLInputElement > (".toggle-input").forEach(input => {
+    container.querySelectorAll<HTMLInputElement>(".toggle-input").forEach(input => {
       input.addEventListener("change", () => this.OnControlChange(input));
     });
 
-    container.querySelectorAll < HTMLSelectElement > (".select-ctrl").forEach(input => {
+    container.querySelectorAll<HTMLSelectElement>(".select-ctrl").forEach(input => {
       input.addEventListener("change", () => this.OnControlChange(input));
     });
 
-    container.querySelectorAll < HTMLInputElement > (".color-input").forEach(input => {
+    container.querySelectorAll<HTMLInputElement>(".color-input").forEach(input => {
       input.addEventListener("input", () => {
         const colorVal = input.closest(".color-row")?.querySelector(".color-value");
         if (colorVal) colorVal.textContent = input.value;
@@ -745,17 +782,17 @@ class HyprEditor {
       });
     });
 
-    container.querySelectorAll < HTMLInputElement > (".text-input").forEach(input => {
+    container.querySelectorAll<HTMLInputElement>(".text-input").forEach(input => {
       let timer: ReturnType<typeof setTimeout>;
       input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => this.OnControlChange(input), 600); });
     });
 
-    container.querySelectorAll < HTMLInputElement > (".list-entry-input").forEach(input => {
+    container.querySelectorAll<HTMLInputElement>(".list-entry-input").forEach(input => {
       let timer: ReturnType<typeof setTimeout>;
       input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => this.OnListEntryChange(input), 600); });
     });
 
-    container.querySelectorAll < HTMLButtonElement > (".btn-add-entry").forEach(btn => {
+    container.querySelectorAll<HTMLButtonElement>(".btn-add-entry").forEach(btn => {
       btn.addEventListener("click", () => {
         const listKey = btn.dataset.listkey!;
         const sectionPath = JSON.parse(btn.dataset.path!) as string[];
@@ -763,7 +800,7 @@ class HyprEditor {
       });
     });
 
-    container.querySelectorAll < HTMLButtonElement > (".btn-delete-entry").forEach(btn => {
+    container.querySelectorAll<HTMLButtonElement>(".btn-delete-entry").forEach(btn => {
       btn.addEventListener("click", async () => {
         const ok = await this.ConfirmAction({ title: "Delete this entry?", message: "Are you sure you want to delete this list entry? This will comment it out in the config until you save.", confirmText: "Delete", cancelText: "Cancel", danger: true });
         if (!ok) return;
@@ -772,7 +809,7 @@ class HyprEditor {
       });
     });
 
-    container.querySelectorAll < HTMLButtonElement > (".btn-autoset").forEach(btn => {
+    container.querySelectorAll<HTMLButtonElement>(".btn-autoset").forEach(btn => {
       btn.addEventListener("click", async () => {
         const key = btn.dataset.key!;
         const sectionPath = JSON.parse(btn.dataset.path!) as string[];
@@ -784,7 +821,7 @@ class HyprEditor {
       });
     });
 
-    container.querySelectorAll < HTMLElement > (".setting-row").forEach(row => {
+    container.querySelectorAll<HTMLElement>(".setting-row").forEach(row => {
       const key = row.dataset.key!;
       const setting = sub.settings?.find(s => s.key === key);
       if (!setting) return;
@@ -792,11 +829,11 @@ class HyprEditor {
       const previewHandler = (): void => {
         let currentValue: unknown = null;
         const input = (
-          row.querySelector < HTMLInputElement > (".slider") ||
-          row.querySelector < HTMLInputElement > (".toggle-input") ||
-          row.querySelector < HTMLSelectElement > (".select-ctrl") ||
-          row.querySelector < HTMLInputElement > (".color-input") ||
-          row.querySelector < HTMLInputElement > (".text-input")
+          row.querySelector<HTMLInputElement>(".slider") ||
+          row.querySelector<HTMLInputElement>(".toggle-input") ||
+          row.querySelector<HTMLSelectElement>(".select-ctrl") ||
+          row.querySelector<HTMLInputElement>(".color-input") ||
+          row.querySelector<HTMLInputElement>(".text-input")
         );
 
         if (input) {
@@ -812,14 +849,14 @@ class HyprEditor {
 
     if (sub?.settings?.length) {
       const firstSetting = sub.settings[0];
-      const firstRow = container.querySelector < HTMLElement > (`.setting-row[data-key="${firstSetting.key}"]`);
+      const firstRow = container.querySelector<HTMLElement>(`.setting-row[data-key="${firstSetting.key}"]`);
       if (firstRow) {
         const input = (
-          firstRow.querySelector < HTMLInputElement > (".slider") ||
-          firstRow.querySelector < HTMLInputElement > (".toggle-input") ||
-          firstRow.querySelector < HTMLSelectElement > (".select-ctrl") ||
-          firstRow.querySelector < HTMLInputElement > (".color-input") ||
-          firstRow.querySelector < HTMLInputElement > (".text-input")
+          firstRow.querySelector<HTMLInputElement>(".slider") ||
+          firstRow.querySelector<HTMLInputElement>(".toggle-input") ||
+          firstRow.querySelector<HTMLSelectElement>(".select-ctrl") ||
+          firstRow.querySelector<HTMLInputElement>(".color-input") ||
+          firstRow.querySelector<HTMLInputElement>(".text-input")
         );
         const currentValue = input ? (input.classList.contains("toggle-input") ? (input as HTMLInputElement).checked : input.value) : null;
         this.UpdatePreview(firstSetting, currentValue, sub.sectionPath);
@@ -1002,7 +1039,7 @@ class HyprEditor {
 
     dropdown.innerHTML = results.map(r => `<div class="search-result" data-path='${JSON.stringify(r.path)}' data-key="${r.key}"><span class="search-result-key">${r.key}</span><span class="search-result-path">${[...r.path, r.key].join(".")}</span><span class="search-result-value">${r.value === "[section]" ? "<em>section</em>" : this.EscapeHtml(r.value)}</span></div>`).join("");
 
-    dropdown.querySelectorAll < HTMLElement > (".search-result").forEach(el => {
+    dropdown.querySelectorAll<HTMLElement>(".search-result").forEach(el => {
       el.addEventListener("click", () => {
         const path = JSON.parse(el.dataset.path!) as string[];
         const key = el.dataset.key!;
@@ -1021,7 +1058,7 @@ class HyprEditor {
         if (matches && hasKey) {
           this.ActivateSection(sec, sub);
           setTimeout(() => {
-            const el = document.querySelector < HTMLElement > (`[data-key="${key}"]`);
+            const el = document.querySelector<HTMLElement>(`[data-key="${key}"]`);
             if (el) { el.classList.add("highlight"); el.scrollIntoView({ behavior: "smooth", block: "center" }); }
             setTimeout(() => el?.classList.remove("highlight"), 2000);
           }, 100);
@@ -1053,6 +1090,10 @@ class HyprEditor {
     if (!btn) return;
     btn.classList.toggle("dirty", this.state.dirty);
     btn.textContent = this.state.dirty ? "Save*" : "Save";
+  }
+
+  // TODO: finish this
+  private UpdatePathDisplay(): void {
   }
 
   private ShowWelcome(): void {

@@ -698,6 +698,26 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
+    id: "system",
+    label: "System",
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M21.17 8A12 12 0 0 1 22 12"/><path d="M2.83 8A12 12 0 0 0 2 12"/></svg>`,
+    group: "TOOLS",
+    subsections: [
+      {
+        id: "bluetooth",
+        label: "Bluetooth",
+        type: "bluetooth",
+        settings: [],
+      },
+      {
+        id: "wifi",
+        label: "Wi-Fi",
+        type: "wifi",
+        settings: [],
+      },
+    ],
+  },
+  {
     id: "waybar",
     label: "Waybar",
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="4" rx="1"/><line x1="6" y1="6" x2="6" y2="6.01"/><line x1="10" y1="6" x2="10" y2="6.01"/><path d="M14 6h4"/></svg>`,
