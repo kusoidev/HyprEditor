@@ -2062,3 +2062,456 @@ button {
 .wt-apply-btn:hover {
   background: rgba(255, 255, 255, 0.28);
 }
+
+.sys-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
+  max-width: 680px;
+}
+
+.sys-panel {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.sys-panel:hover {
+  border-color: rgba(45, 212, 191, 0.15);
+}
+
+.sys-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 12px;
+}
+
+.sys-panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sys-panel-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(45, 212, 191, 0.08);
+  color: #2dd4bf;
+  flex-shrink: 0;
+}
+
+.sys-panel-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #cdd6f4;
+  letter-spacing: 0.01em;
+}
+
+.sys-panel-sub {
+  font-size: 11px;
+  margin-top: 2px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.sys-panel-sub.status-on {
+  color: #2dd4bf;
+}
+
+.sys-panel-sub.status-off {
+  color: #6c7086;
+}
+
+.sys-unavail {
+  font-size: 11px;
+  color: #6c7086;
+  font-style: italic;
+}
+
+.sys-panel-body {
+  padding: 12px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sys-devices-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tb-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #a6adc8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.tb-action:hover:not(:disabled) {
+  background: rgba(45, 212, 191, 0.1);
+  border-color: rgba(45, 212, 191, 0.3);
+  color: #2dd4bf;
+}
+
+.tb-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tb-action.save {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #2dd4bf;
+}
+
+.tb-action.save:hover {
+  background: rgba(45, 212, 191, 0.2);
+}
+
+.tb-action--danger {
+  color: #f38ba8;
+  border-color: rgba(243, 139, 168, 0.15);
+  background: rgba(243, 139, 168, 0.05);
+}
+
+.tb-action--danger:hover:not(:disabled) {
+  background: rgba(243, 139, 168, 0.12);
+  border-color: rgba(243, 139, 168, 0.35);
+  color: #f38ba8;
+}
+
+.tb-action.scanning {
+  color: #2dd4bf;
+  border-color: rgba(45, 212, 191, 0.3);
+  animation: pulse-border 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+
+  0%,
+  100% {
+    border-color: rgba(45, 212, 191, 0.3);
+  }
+
+  50% {
+    border-color: rgba(45, 212, 191, 0.7);
+  }
+}
+
+.sys-device-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6c7086;
+  padding: 8px 0 4px;
+}
+
+.sys-device-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sys-device-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.sys-device-card.connected {
+  border-color: rgba(45, 212, 191, 0.2);
+  background: rgba(45, 212, 191, 0.05);
+}
+
+.sys-device-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #a6adc8;
+  flex-shrink: 0;
+}
+
+.sys-device-card.connected .sys-device-icon {
+  background: rgba(45, 212, 191, 0.1);
+  color: #2dd4bf;
+}
+
+.sys-device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sys-device-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #cdd6f4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sys-device-mac {
+  font-size: 10px;
+  color: #6c7086;
+  font-family: monospace;
+  letter-spacing: 0.03em;
+}
+
+.sys-device-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sys-empty {
+  text-align: center;
+  padding: 24px 12px;
+  color: #6c7086;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.sys-network-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sys-network-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.sys-network-row.active {
+  border-color: rgba(45, 212, 191, 0.25);
+  background: rgba(45, 212, 191, 0.05);
+}
+
+.sys-network-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sys-network-ssid {
+  font-size: 13px;
+  font-weight: 500;
+  color: #cdd6f4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sys-network-row.active .sys-network-ssid {
+  color: #2dd4bf;
+}
+
+.sys-network-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: rgba(45, 212, 191, 0.12);
+  color: #2dd4bf;
+  border: 1px solid rgba(45, 212, 191, 0.25);
+  white-space: nowrap;
+}
+
+.sys-network-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sys-connecting-label {
+  font-size: 11px;
+  color: #2dd4bf;
+  animation: pulse-border 1.2s ease-in-out infinite;
+}
+
+.sys-signal-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.sys-signal-bars .bar {
+  width: 3px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 0.2s;
+}
+
+.sys-signal-bars .bar:nth-child(1) {
+  height: 4px;
+}
+
+.sys-signal-bars .bar:nth-child(2) {
+  height: 7px;
+}
+
+.sys-signal-bars .bar:nth-child(3) {
+  height: 10px;
+}
+
+.sys-signal-bars .bar:nth-child(4) {
+  height: 14px;
+}
+
+.sys-pwd-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sys-pwd-modal.hidden {
+  display: none;
+}
+
+.sys-pwd-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.sys-pwd-dialog {
+  position: relative;
+  z-index: 1;
+  background: #161616;
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  border-radius: 14px;
+  padding: 24px 28px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.sys-pwd-dialog h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #cdd6f4;
+  margin: 0;
+}
+
+.sys-pwd-ssid {
+  font-size: 12px;
+  color: #2dd4bf;
+  margin: 0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-pwd-input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cdd6f4;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.sys-pwd-input:focus {
+  border-color: rgba(45, 212, 191, 0.4);
+  background: rgba(45, 212, 191, 0.04);
+}
+
+.sys-pwd-input::placeholder {
+  color: #45475a;
+}
+
+.sys-pwd-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.sys-device-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sys-device-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sys-device-status-badge.badge-connected {
+  background: rgba(45, 212, 191, 0.12);
+  color: #2dd4bf;
+  border: 1px solid rgba(45, 212, 191, 0.25);
+}
+
+.sys-device-status-badge.badge-paired {
+  background: rgba(166, 173, 200, 0.08);
+  color: #6c7086;
+  border: 1px solid rgba(166, 173, 200, 0.12);
+}

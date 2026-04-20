@@ -157,22 +157,29 @@ class SystemManager {
 
   private BuildDeviceCard(d: BluetoothDevice): string {
     return `
-      <div class="sys-device-card ${d.connected ? "connected" : ""}">
-        <div class="sys-device-icon">${this.BtIcon(d)}</div>
-        <div class="sys-device-info">
+    <div class="sys-device-card ${d.connected ? "connected" : ""}">
+      <div class="sys-device-icon">${this.BtIcon(d)}</div>
+      <div class="sys-device-info">
+        <div class="sys-device-name-row">
           <span class="sys-device-name">${this.EscapeHtml(d.name)}</span>
-          <span class="sys-device-mac">${d.mac}</span>
+          <span class="sys-device-status-badge ${d.connected ? "badge-connected" : "badge-paired"}">
+            ${d.connected ? "Connected" : "Paired"}
+          </span>
         </div>
-        <div class="sys-device-actions">
-          ${d.connected
+        <span class="sys-device-mac">${d.mac}</span>
+      </div>
+      <div class="sys-device-actions">
+        ${d.connected
         ? `<button class="tb-action" data-bt-disconnect="${this.EscapeHtml(d.mac)}">Disconnect</button>`
         : `<button class="tb-action" data-bt-connect="${this.EscapeHtml(d.mac)}">Connect</button>`
       }
-          <button class="tb-action tb-action--danger" data-bt-remove="${this.EscapeHtml(d.mac)}" title="Remove device">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-      </div>`;
+        <button class="tb-action tb-action--danger" data-bt-remove="${this.EscapeHtml(d.mac)}" title="Remove device">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>`;
   }
 
   private BindBluetoothEvents(): void {
@@ -199,8 +206,28 @@ class SystemManager {
     container.querySelector<HTMLButtonElement>("#bt-scan-btn")?.addEventListener("click", async () => {
       this.state.btScanning = true;
       this.renderBluetoothSection(container);
+
       const res = await window.hypr.bluetoothScan().catch(() => ({ ok: false, devices: [] as BluetoothDevice[] }));
-      this.state.btDevices = res.devices;
+
+      if (res.ok && res.devices.length > 0) {
+        // Filter out nameless/MAC-only BLE advertisers
+        const MAC_RE = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+        const named = res.devices.filter(d =>
+          d.name &&
+          d.name.trim() !== "" &&
+          !MAC_RE.test(d.name.trim())
+        );
+
+        const paired = await window.hypr.getBluetoothDevices().catch(() => ({ ok: false, devices: [] as BluetoothDevice[] }));
+
+        const pairedMacs = new Set(paired.devices.map(d => d.mac.toUpperCase()));
+
+        const newDiscovered = named.filter(d => !pairedMacs.has(d.mac.toUpperCase()));
+        const sanitized = newDiscovered.map(d => ({ ...d, connected: false }));
+
+        this.state.btDevices = [...paired.devices, ...sanitized];
+      }
+
       this.state.btScanning = false;
       this.renderBluetoothSection(container);
     });
@@ -262,8 +289,15 @@ class SystemManager {
       }</div>
               </div>
             </div>
-            ${wifiStatus.ok ? `
-              <div style="display:flex;align-items:center;gap:8px;">
+          ${wifiStatus.ok ? `
+            <div style="display:flex;align-items:center;gap:8px;">
+              <label class="toggle-label">
+                <input type="checkbox" id="wifi-power-toggle" class="toggle-input"
+                  ${wifiStatus.enabled ? "checked" : ""}
+                  ${wifiBusy ? "disabled" : ""}>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+              ${wifiStatus.enabled ? `
                 <button class="tb-action" id="wifi-rescan-btn" ${wifiBusy ? "disabled" : ""}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                     <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
@@ -271,11 +305,12 @@ class SystemManager {
                   </svg>
                   Refresh
                 </button>
-                ${wifiStatus.enabled && wifiStatus.connection ? `
+                ${wifiStatus.connection ? `
                   <button class="tb-action tb-action--danger" id="wifi-disconnect-btn">Disconnect</button>
                 ` : ""}
-              </div>` : `<span class="sys-unavail">Install NetworkManager</span>`
-      }
+              ` : ""}
+            </div>` : `<span class="sys-unavail">Install NetworkManager</span>`
+          }
           </div>
 
           ${wifiStatus.ok && wifiStatus.enabled ? `
@@ -314,6 +349,33 @@ class SystemManager {
   private BindWifiEvents(): void {
     const container = this.wifiContainer;
     if (!container) return;
+
+    container.querySelector<HTMLInputElement>("#wifi-power-toggle")?.addEventListener("change", async (e) => {
+      const on = (e.target as HTMLInputElement).checked;
+
+      this.state.wifiBusy = true;
+      this.renderWifiSection(container);
+
+      const res = await (window.hypr.setWifiPower as (on: boolean) => Promise<{ ok: boolean }>)(on)
+        .catch(() => ({ ok: false }));
+
+      if (res.ok) {
+        this.state.wifiStatus.enabled = on;
+        if (on) {
+          const nets = await window.hypr.getWifiNetworks().catch(() => ({ ok: false, networks: [] as WifiNetwork[] }));
+          this.state.wifiNetworks = nets.networks;
+        } else {
+          this.state.wifiNetworks = [];
+          this.state.wifiStatus.connection = null;
+        }
+      } else {
+        // Revert the toggle visually if the call failed
+        (e.target as HTMLInputElement).checked = !on;
+      }
+
+      this.state.wifiBusy = false;
+      this.renderWifiSection(container);
+    });
 
     container.querySelector<HTMLButtonElement>("#wifi-rescan-btn")?.addEventListener("click", async () => {
       this.state.wifiBusy = true;

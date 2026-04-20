@@ -461,7 +461,12 @@ class HyprApp {
     ipcMain.handle("get-included-files", (_: IpcMainInvokeEvent, configPath: string, sources: string[]): IncludedFile[] => {
       return this.GetIncludedFiles(configPath, sources);
     });
-
+    ipcMain.handle("set-wifi-power", async (_, on: boolean) => {
+      const cmd = on ? "nmcli radio wifi on" : "nmcli radio wifi off";
+      return new Promise(resolve =>
+        exec(cmd, err => resolve({ ok: !err }))
+      );
+    });
     ipcMain.handle("window-minimize", () => this.mainWindow?.minimize());
     ipcMain.handle("window-maximize", () => {
       if (this.mainWindow?.isMaximized()) this.mainWindow.unmaximize();

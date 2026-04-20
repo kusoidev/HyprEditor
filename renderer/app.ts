@@ -164,9 +164,7 @@ class HyprEditor {
     }
 
     const sources = getAllSources(mainParsed.root);
-    const includedFiles = sources.length > 0
-      ? await window.hypr.getIncludedFiles(filePath, sources).catch(() => [])
-      : [];
+    const includedFiles = sources.length > 0 ? await window.hypr.getIncludedFiles(filePath, sources).catch(() => []) : [];
 
     const segments: FileSegment[] = [{ filePath, startLine: 0, lineCount: mainParsed.rawLines.length }];
     let allLines: string[] = [...mainParsed.rawLines];
@@ -564,7 +562,8 @@ class HyprEditor {
       html += `</div>`;
     }
 
-    const isSpecial = sub?.type === "waybar-editor" || sub?.type === "waybar-config-editor" || sub?.type === "wallpaper-browser";
+    // i forgot to add bluetooth and wifi here
+    const isSpecial = sub?.type === "waybar-editor" || sub?.type === "waybar-config-editor" || sub?.type === "wallpaper-browser" || sub?.type === "bluetooth" || sub?.type === "wifi";
 
     if (isSpecial) html += `<div id="special-section-content" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>`;
 
@@ -1092,8 +1091,10 @@ class HyprEditor {
     btn.textContent = this.state.dirty ? "Save*" : "Save";
   }
 
-  // TODO: finish this
   private UpdatePathDisplay(): void {
+    const el = this.$("config-path-display");
+    if (!el) return;
+    el.textContent = this.state.configPath ? this.state.configPath.split("/").slice(-2).join("/") : "";
   }
 
   private ShowWelcome(): void {

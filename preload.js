@@ -39,4 +39,5 @@ contextBridge.exposeInMainWorld('hypr', {
   wifiConnect: (ssid, password) => ipcRenderer.invoke('wifi-connect', ssid, password),
   wifiDisconnect: () => ipcRenderer.invoke('wifi-disconnect'),
   wifiForget: (ssid) => ipcRenderer.invoke('wifi-forget', ssid),
+  setWifiPower: (on) => ipcRenderer.invoke("set-wifi-power", on),
 });
