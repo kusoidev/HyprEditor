@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# HyprEditor Installer for CachyOS / Arch Linux
-
 set -Eeuo pipefail
 
 CYAN='\033[0;36m'
@@ -36,7 +34,7 @@ need_file() {
 
 print_header
 
-echo -e "${CYAN}[1/6] Checking prerequisites...${NC}"
+echo -e "${CYAN}[1/7] Checking prerequisites...${NC}"
 
 if ! command -v node >/dev/null 2>&1; then
   echo -e "${YELLOW}Node.js not found. Installing via pacman...${NC}"
@@ -58,46 +56,72 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 echo -e "${GREEN}✓ npm $(npm --version) found${NC}"
 
-echo -e "\n${CYAN}[2/6] Verifying project files...${NC}"
+echo -e "\n${CYAN}[2/7] Verifying project files...${NC}"
 
 need_file "$SCRIPT_DIR/package.json"
-need_file "$SCRIPT_DIR/main.js"
+need_file "$SCRIPT_DIR/main.ts"
 need_file "$SCRIPT_DIR/preload.js"
+need_file "$SCRIPT_DIR/build.mjs"
 need_file "$SCRIPT_DIR/renderer/index.html"
 need_file "$SCRIPT_DIR/renderer/style.css"
-need_file "$SCRIPT_DIR/renderer/app.js"
-need_file "$SCRIPT_DIR/renderer/parser.js"
-need_file "$SCRIPT_DIR/renderer/schema.js"
-need_file "$SCRIPT_DIR/renderer/waybar.js"
+need_file "$SCRIPT_DIR/renderer/app.ts"
+need_file "$SCRIPT_DIR/renderer/parser.ts"
+need_file "$SCRIPT_DIR/renderer/schema.ts"
+need_file "$SCRIPT_DIR/renderer/waybar.ts"
+need_file "$SCRIPT_DIR/renderer/types.ts"
 
 echo -e "${GREEN}✓ Required files found${NC}"
 
-echo -e "\n${CYAN}[3/6] Installing files to $INSTALL_DIR...${NC}"
+echo -e "\n${CYAN}[3/7] Installing build dependencies...${NC}"
+
+cd "$SCRIPT_DIR"
+
+if ! npm list esbuild --depth=0 >/dev/null 2>&1; then
+  npm install --no-save esbuild
+fi
+
+echo -e "${GREEN}✓ Build dependencies ready${NC}"
+
+echo -e "\n${CYAN}[4/7] Compiling TypeScript...${NC}"
+
+cd "$SCRIPT_DIR"
+node build.mjs || die "TypeScript compilation failed."
+
+if [[ ! -f "$SCRIPT_DIR/dist/main.js" ]]; then
+  die "Build output not found. Compilation may have failed silently."
+fi
+
+echo -e "${GREEN}✓ TypeScript compiled to dist/${NC}"
+
+echo -e "\n${CYAN}[5/7] Installing files to $INSTALL_DIR...${NC}"
 
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/renderer"
 mkdir -p "$BIN_DIR"
 mkdir -p "$APP_DIR"
 
-cp "$SCRIPT_DIR/package.json"        "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/dist/main.js"              "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/dist/preload.js"           "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/dist/renderer/index.html" "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/dist/renderer/style.css"  "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/dist/renderer/app.js"     "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/dist/renderer/waybar.js"  "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/dist/renderer/parser.js"  "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/dist/renderer/schema.js"  "$INSTALL_DIR/renderer/"
+cp "$SCRIPT_DIR/package.json"             "$INSTALL_DIR/"
 [[ -f "$SCRIPT_DIR/package-lock.json" ]] && cp "$SCRIPT_DIR/package-lock.json" "$INSTALL_DIR/" || true
-cp "$SCRIPT_DIR/main.js"             "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/preload.js"          "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/renderer/index.html" "$INSTALL_DIR/renderer/"
-cp "$SCRIPT_DIR/renderer/style.css"  "$INSTALL_DIR/renderer/"
-cp "$SCRIPT_DIR/renderer/app.js"     "$INSTALL_DIR/renderer/"
-cp "$SCRIPT_DIR/renderer/waybar.js"     "$INSTALL_DIR/renderer/"
-cp "$SCRIPT_DIR/renderer/parser.js"  "$INSTALL_DIR/renderer/"
-cp "$SCRIPT_DIR/renderer/schema.js"  "$INSTALL_DIR/renderer/"
 
-if [[ -d "$SCRIPT_DIR/assets" ]]; then
+if [[ -d "$SCRIPT_DIR/dist/assets" ]]; then
+  rm -rf "$INSTALL_DIR/assets"
+  cp -r "$SCRIPT_DIR/dist/assets" "$INSTALL_DIR/"
+elif [[ -d "$SCRIPT_DIR/assets" ]]; then
   rm -rf "$INSTALL_DIR/assets"
   cp -r "$SCRIPT_DIR/assets" "$INSTALL_DIR/"
 fi
 
 echo -e "${GREEN}✓ Files copied${NC}"
 
-echo -e "\n${CYAN}[4/6] Installing npm dependencies...${NC}"
+echo -e "\n${CYAN}[6/7] Installing npm dependencies...${NC}"
 
 cd "$INSTALL_DIR"
 npm install
@@ -108,7 +132,7 @@ fi
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 
-echo -e "\n${CYAN}[5/6] Creating launcher...${NC}"
+echo -e "\n${CYAN}[7/7] Creating launcher and desktop entry...${NC}"
 
 cat > "$BIN_DIR/hypreditor" << EOF
 #!/usr/bin/env bash
@@ -122,10 +146,6 @@ chmod +x "$BIN_DIR/hypreditor"
 if [[ ! -x "$BIN_DIR/hypreditor" ]]; then
   die "Failed to create launcher at $BIN_DIR/hypreditor"
 fi
-
-echo -e "${GREEN}✓ Launcher created at $BIN_DIR/hypreditor${NC}"
-
-echo -e "\n${CYAN}[6/6] Creating desktop entry...${NC}"
 
 cat > "$APP_DIR/hypreditor.desktop" << EOF
 [Desktop Entry]
@@ -145,6 +165,7 @@ if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
 fi
 
+echo -e "${GREEN}✓ Launcher created at $BIN_DIR/hypreditor${NC}"
 echo -e "${GREEN}✓ Desktop entry created${NC}"
 
 echo -e "\n${GREEN}════════════════════════════════════${NC}"
