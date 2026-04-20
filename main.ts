@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, IpcMainInvokeEvent } from "electro
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { exec } from "child_process";
+import { exec, spawn, ChildProcess } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
@@ -29,6 +29,7 @@ interface IncludedFile { path: string; content: string; source: string; }
 class HyprApp {
   private mainWindow: BrowserWindow | null = null;
   private watchedFiles: Map<string, WatchListener> = new Map();
+  private btMonitor: ChildProcess | null = null;
   private readonly IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".avif"]);
 
   CreateWindow(): void {
@@ -50,7 +51,10 @@ class HyprApp {
 
     this.mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
     if (process.argv.includes("--dev")) this.mainWindow.webContents.openDevTools();
-    this.mainWindow.on("closed", () => { this.mainWindow = null; });
+    this.mainWindow.on("closed", () => {
+      this.StopBluetoothMonitor();
+      this.mainWindow = null;
+    });
   }
 
   private FindHyprlandConfig(): string | null {
@@ -418,6 +422,68 @@ class HyprApp {
     }
   }
 
+  private StartBluetoothMonitor(): void {
+    if (this.btMonitor) return;
+
+    const proc = spawn("bluetoothctl", ["monitor"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    this.btMonitor = proc;
+
+    let buffer = "";
+
+    proc.stdout?.on("data", (data: Buffer) => {
+      buffer += data.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const connMatch = line.match(
+          /\[CHG\]\s+Device\s+([0-9A-F:]{17})\s+Connected:\s+(yes|no)/i
+        );
+        if (connMatch) {
+          this.mainWindow?.webContents.send("bluetooth-device-changed", {
+            type: "connection",
+            mac: connMatch[1].toUpperCase(),
+            connected: connMatch[2].toLowerCase() === "yes",
+          });
+          continue;
+        }
+
+        const newMatch = line.match(
+          /\[NEW\]\s+Device\s+([0-9A-F:]{17})\s+(.+)/i
+        );
+        if (newMatch) {
+          this.mainWindow?.webContents.send("bluetooth-device-changed", {
+            type: "new",
+            mac: newMatch[1].toUpperCase(),
+            name: newMatch[2].trim(),
+          });
+          continue;
+        }
+
+        const delMatch = line.match(/\[DEL\]\s+Device\s+([0-9A-F:]{17})/i);
+        if (delMatch) {
+          this.mainWindow?.webContents.send("bluetooth-device-changed", {
+            type: "removed",
+            mac: delMatch[1].toUpperCase(),
+          });
+        }
+      }
+    });
+
+    proc.on("exit", () => {
+      this.btMonitor = null;
+    });
+  }
+
+  private StopBluetoothMonitor(): void {
+    if (this.btMonitor) {
+      this.btMonitor.kill();
+      this.btMonitor = null;
+    }
+  }
+
   RegisterIpc(): void {
     ipcMain.handle("restore-backups", (_: IpcMainInvokeEvent, filePaths: string[]): RestoreResult => {
       try {
@@ -431,6 +497,8 @@ class HyprApp {
     });
 
     ipcMain.handle("find-config", (): string | null => this.FindHyprlandConfig());
+
+    ipcMain.handle("bluetooth-start-monitor", () => this.StartBluetoothMonitor());
 
     ipcMain.handle("read-file", (_: IpcMainInvokeEvent, filePath: string): FileReadResult => {
       try { return { ok: true, content: fs.readFileSync(filePath, "utf8") }; }

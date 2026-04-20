@@ -11,6 +11,13 @@ interface SystemState {
   btBusy: boolean;
 }
 
+interface BluetoothChangeEvent {
+  type: "connection" | "new" | "removed";
+  mac: string;
+  connected?: boolean;
+  name?: string;
+}
+
 class SystemManager {
   private state: SystemState = {
     btStatus: { ok: false, powered: false, discovering: false, name: "Bluetooth" },
@@ -42,6 +49,42 @@ class SystemManager {
       const nets = await window.hypr.getWifiNetworks().catch(() => ({ ok: false, networks: [] as WifiNetwork[] }));
       this.state.wifiNetworks = nets.networks;
     }
+    await window.hypr.bluetoothStartMonitor?.().catch(() => { });
+    const onBtChange = (_: unknown, data: BluetoothChangeEvent): void => {
+      const MAC_RE = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+
+      if (data.type === "connection") {
+        const device = this.state.btDevices.find(
+          d => d.mac.toUpperCase() === data.mac
+        );
+        if (device) {
+          device.connected = data.connected ?? false;
+          if (this.btContainer) this.renderBluetoothSection(this.btContainer);
+        }
+
+      } else if (data.type === "new") {
+        if (!data.name || MAC_RE.test(data.name.trim())) return;
+        const already = this.state.btDevices.some(
+          d => d.mac.toUpperCase() === data.mac
+        );
+        if (!already) {
+          this.state.btDevices.push({
+            mac: data.mac,
+            name: data.name,
+            connected: false,
+            paired: false,
+          });
+          if (this.btContainer) this.renderBluetoothSection(this.btContainer);
+        }
+
+      } else if (data.type === "removed") {
+        this.state.btDevices = this.state.btDevices.filter(
+          d => d.mac.toUpperCase() !== data.mac
+        );
+        if (this.btContainer) this.renderBluetoothSection(this.btContainer);
+      }
+    };
+    window.hypr.onBluetoothChange?.(onBtChange);
   }
 
   private EscapeHtml(s: unknown): string {

@@ -40,4 +40,9 @@ contextBridge.exposeInMainWorld('hypr', {
   wifiDisconnect: () => ipcRenderer.invoke('wifi-disconnect'),
   wifiForget: (ssid) => ipcRenderer.invoke('wifi-forget', ssid),
   setWifiPower: (on) => ipcRenderer.invoke("set-wifi-power", on),
+  bluetoothStartMonitor: () => ipcRenderer.invoke("bluetooth-start-monitor"),
+
+  onBluetoothChange: (cb) => ipcRenderer.on("bluetooth-device-changed", cb),
+
+  offBluetoothChange: (cb) => ipcRenderer.off("bluetooth-device-changed", cb),
 });
