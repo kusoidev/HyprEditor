@@ -25,6 +25,23 @@ import {
 } from "./system.js";
 import { SECTIONS } from "./schema.js";
 
+import {
+  initLockscreenSection,
+  renderLockscreenSection,
+} from "./lockscreen/lockscreen.js";
+import {
+  initPowerMenuSection,
+  renderPowerMenuSection,
+} from "./powermenu/powermenu.js";
+import {
+  initAppLauncherSection,
+  renderAppLauncherSection,
+} from "./applauncher/applauncher.js";
+import {
+  initQuickSettingsSection,
+  renderQuickSettingsSection,
+} from "./quicksettings/quicksettings.js";
+
 interface SchemaSetting {
   key: string;
   label: string;
@@ -139,6 +156,10 @@ class HyprEditor {
       await initWaybarConfigSection();
       await initWallpaperSection();
       await initSystemSection();
+      await initLockscreenSection();
+      await initPowerMenuSection();
+      await initAppLauncherSection();
+      await initQuickSettingsSection();
     } else {
       this.ShowWelcome();
     }
@@ -563,7 +584,16 @@ class HyprEditor {
     }
 
     // i forgot to add bluetooth and wifi here
-    const isSpecial = sub?.type === "waybar-editor" || sub?.type === "waybar-config-editor" || sub?.type === "wallpaper-browser" || sub?.type === "bluetooth" || sub?.type === "wifi";
+    const isSpecial =
+      sub?.type === "waybar-editor" ||
+      sub?.type === "waybar-config-editor" ||
+      sub?.type === "wallpaper-browser" ||
+      sub?.type === "bluetooth" ||
+      sub?.type === "wifi" ||
+      sub?.type === "lockscreen" ||
+      sub?.type === "powermenu" ||
+      sub?.type === "applauncher" ||
+      sub?.type === "quicksettings";
 
     if (isSpecial) html += `<div id="special-section-content" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>`;
 
@@ -603,6 +633,30 @@ class HyprEditor {
     if (sub?.type === "wifi") {
       const container = document.getElementById("special-section-content");
       if (container) renderWifiSection(container);
+      return;
+    }
+
+    if (sub?.type === "lockscreen") {
+      const container = document.getElementById("special-section-content");
+      if (container) renderLockscreenSection(container);
+      return;
+    }
+
+    if (sub?.type === "powermenu") {
+      const container = document.getElementById("special-section-content");
+      if (container) renderPowerMenuSection(container);
+      return;
+    }
+
+    if (sub?.type === "applauncher") {
+      const container = document.getElementById("special-section-content");
+      if (container) renderAppLauncherSection(container);
+      return;
+    }
+
+    if (sub?.type === "quicksettings") {
+      const container = document.getElementById("special-section-content");
+      if (container) renderQuickSettingsSection(container);
       return;
     }
 

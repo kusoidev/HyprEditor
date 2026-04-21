@@ -738,6 +738,42 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
+    id: "lockscreen",
+    label: "Lockscreen",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+    group: "Desktop",
+    subsections: [
+      { id: "lockscreen-main", label: "Lockscreen", type: "lockscreen" },
+    ],
+  },
+  {
+    id: "powermenu",
+    label: "Power Menu",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>`,
+    group: "Desktop",
+    subsections: [
+      { id: "powermenu-main", label: "Power Menu", type: "powermenu" },
+    ],
+  },
+  {
+    id: "applauncher",
+    label: "App Launcher",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+    group: "Desktop",
+    subsections: [
+      { id: "applauncher-main", label: "App Launcher", type: "applauncher" },
+    ],
+  },
+  {
+    id: "quicksettings",
+    label: "Quick Settings",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>`,
+    group: "Desktop",
+    subsections: [
+      { id: "quicksettings-main", label: "Quick Settings", type: "quicksettings" },
+    ],
+  },
+  {
     id: "wallpaper",
     label: "Wallpaper",
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,

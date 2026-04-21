@@ -30,9 +30,38 @@ for (const file of rendererEntries) {
   });
 }
 
+const nestedRendererEntries = [
+  "lockscreen/lockscreen",
+  "powermenu/powermenu",
+  "quicksettings/quicksettings",
+  "applauncher/applauncher",
+];
+for (const file of nestedRendererEntries) {
+  const outSubdir = join(rendererDist, file.split("/")[0]);
+  mkdirSync(outSubdir, { recursive: true });
+  await esbuild.build({
+    entryPoints: [`renderer/${file}.ts`],
+    bundle: false,
+    platform: "browser",
+    target: "es2020",
+    format: "esm",
+    outfile: join(rendererDist, `${file}.js`),
+  });
+}
+
 if (existsSync("preload.js")) cpSync("preload.js", join(distDir, "preload.js"));
 if (existsSync("renderer/index.html")) cpSync("renderer/index.html", join(rendererDist, "index.html"));
 if (existsSync("renderer/style.css")) cpSync("renderer/style.css", join(rendererDist, "style.css"));
+
+const nestedCssFiles = [
+  "lockscreen/lockscreen-qs.css",
+];
+for (const file of nestedCssFiles) {
+  const src = join("renderer", file);
+  const dest = join(rendererDist, file);
+  if (existsSync(src)) cpSync(src, dest);
+}
+
 if (existsSync("assets")) cpSync("assets", join(distDir, "assets"), { recursive: true });
 
 console.log("build complete > dist/");

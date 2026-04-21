@@ -70,6 +70,10 @@ need_file "$SCRIPT_DIR/renderer/schema.ts"
 need_file "$SCRIPT_DIR/renderer/system.ts"
 need_file "$SCRIPT_DIR/renderer/waybar.ts"
 need_file "$SCRIPT_DIR/renderer/types.ts"
+need_file "$SCRIPT_DIR/renderer/lockscreen/lockscreen.ts"
+need_file "$SCRIPT_DIR/renderer/lockscreen/lockscreen-qs.css"
+need_file "$SCRIPT_DIR/renderer/powermenu/powermenu.ts"
+need_file "$SCRIPT_DIR/renderer/quicksettings/quicksettings.ts"
 
 echo -e "${GREEN}✓ Required files found${NC}"
 
@@ -100,6 +104,10 @@ mkdir -p "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR/renderer"
 mkdir -p "$BIN_DIR"
 mkdir -p "$APP_DIR"
+mkdir -p "$INSTALL_DIR/renderer/lockscreen"
+mkdir -p "$INSTALL_DIR/renderer/powermenu"
+mkdir -p "$INSTALL_DIR/renderer/quicksettings"
+mkdir -p "$INSTALL_DIR/renderer/applauncher"
 
 cp "$SCRIPT_DIR/dist/main.js"              "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/dist/preload.js"           "$INSTALL_DIR/"
@@ -111,6 +119,11 @@ cp "$SCRIPT_DIR/dist/renderer/parser.js"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/dist/renderer/schema.js"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/dist/renderer/system.js"  "$INSTALL_DIR/renderer/"
 cp "$SCRIPT_DIR/package.json"             "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/dist/renderer/lockscreen/lockscreen.js"      "$INSTALL_DIR/renderer/lockscreen/"
+cp "$SCRIPT_DIR/dist/renderer/lockscreen/lockscreen-qs.css"  "$INSTALL_DIR/renderer/lockscreen/"
+cp "$SCRIPT_DIR/dist/renderer/powermenu/powermenu.js"        "$INSTALL_DIR/renderer/powermenu/"
+cp "$SCRIPT_DIR/dist/renderer/quicksettings/quicksettings.js" "$INSTALL_DIR/renderer/quicksettings/"
+cp "$SCRIPT_DIR/dist/renderer/applauncher/applauncher.js" "$INSTALL_DIR/renderer/applauncher/"
 [[ -f "$SCRIPT_DIR/package-lock.json" ]] && cp "$SCRIPT_DIR/package-lock.json" "$INSTALL_DIR/" || true
 
 if [[ -d "$SCRIPT_DIR/dist/assets" ]]; then

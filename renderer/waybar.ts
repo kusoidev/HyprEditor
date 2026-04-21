@@ -214,7 +214,7 @@ class WaybarManager {
         const editor = document.getElementById("waybar-css-editor") as HTMLTextAreaElement | null;
         if (editor) editor.value = content;
         this.SchedulePreview();
-        this.WaybarStatus("↻ Updated from disk", "info");
+        this.WaybarStatus("Updated from disk", "info");
       });
     }
   }
